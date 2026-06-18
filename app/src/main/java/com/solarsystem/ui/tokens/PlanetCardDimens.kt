@@ -31,4 +31,6 @@ object PlanetCardDimens {
     val LabelValueGap = 4.dp
     val DividerHeight = 30.dp
     val ListGap = 32.dp
+
+    val StackContainerHeight = Height * 7 + ListGap * 6
 }

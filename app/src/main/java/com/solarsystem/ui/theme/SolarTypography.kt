@@ -1,6 +1,7 @@
 package com.solarsystem.ui.theme
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -53,5 +54,45 @@ object SolarTypography {
         fontSize = 10.sp,
         letterSpacing = 0.25.sp,
         color = SolarColors.TextSecondary,
+    )
+
+    val EarthHeroTitle = TextStyle(
+        fontFamily = RubikFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 64.sp,
+        letterSpacing = 0.25.sp,
+        color = SolarColors.TextPrimary,
+        shadow = SolarTextShadow,
+    )
+
+    val SolarHeroTitle = TextStyle(
+        fontFamily = RubikFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 24.sp,
+        letterSpacing = 0.25.sp,
+        color = SolarColors.TextPrimary,
+        shadow = SolarTextShadow,
+    )
+
+    val HeroSubtitle = TextStyle(
+        fontFamily = LilyScriptFontFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        letterSpacing = 0.25.sp,
+        color = Color(0xCCFFFFFF),
+        lineHeight = 22.sp,
+    )
+
+    val SwipeHint = TextStyle(
+        fontFamily = RubikFontFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 16.sp,
+        letterSpacing = 0.25.sp,
+        color = Color.White,
+        shadow = Shadow(
+            color = Color(0x70FFFFFF),
+            offset = Offset(0f, 4f),
+            blurRadius = 16f,
+        ),
     )
 }
