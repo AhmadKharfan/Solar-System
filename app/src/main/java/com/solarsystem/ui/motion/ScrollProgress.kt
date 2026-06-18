@@ -38,24 +38,18 @@ fun rememberSolarScrollMetrics(scrollState: ScrollState): State<SolarScrollMetri
     return remember(scrollState, density, heroRangePx, targetBrowsePx, targetMaxScrollPx) {
         derivedStateOf {
             val scrollPx = scrollState.value.toFloat()
-            val scrollMaxPx = scrollState.maxValue.toFloat()
-            val reachableBrowsePx = if (scrollMaxPx > heroRangePx) {
-                scrollMaxPx - heroRangePx
-            } else {
-                targetBrowsePx
-            }
 
-            val totalPx = scrollPx.coerceIn(0f, maxOf(targetMaxScrollPx, scrollMaxPx))
+            val totalPx = scrollPx.coerceIn(0f, targetMaxScrollPx)
             val heroScrollPx = totalPx.coerceAtMost(heroRangePx)
-            val cardsBrowsePx = (totalPx - heroRangePx).coerceIn(0f, reachableBrowsePx)
+            val cardsBrowsePx = (totalPx - heroRangePx).coerceIn(0f, targetBrowsePx)
             val heroProgress = (heroScrollPx / heroRangePx).coerceIn(0f, 1f)
-            val browseProgress = if (reachableBrowsePx > 0f) {
-                (cardsBrowsePx / reachableBrowsePx).coerceIn(0f, 1f)
+            val browseProgress = if (targetBrowsePx > 0f) {
+                (cardsBrowsePx / targetBrowsePx).coerceIn(0f, 1f)
             } else {
                 0f
             }
             val stackProgress = if (heroProgress < 1f) {
-                heroProgress
+                1f
             } else {
                 browseProgressToStackProgress(browseProgress)
             }
@@ -68,7 +62,7 @@ fun rememberSolarScrollMetrics(scrollState: ScrollState): State<SolarScrollMetri
                 heroProgress = heroProgress,
                 cardsScreenTop = cardsTop,
                 stackProgress = stackProgress,
-                maxScrollPx = maxOf(targetMaxScrollPx, scrollMaxPx),
+                maxScrollPx = targetMaxScrollPx,
             )
         }
     }
