@@ -1,12 +1,15 @@
 package com.solarsystem.ui.screen
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -24,6 +27,7 @@ import com.solarsystem.ui.component.earth.AnimatedEarthLayer
 import com.solarsystem.ui.component.hero.HeroHeaderLayer
 import com.solarsystem.ui.component.hero.SwipeHintFooter
 import com.solarsystem.ui.component.planet.InterpolatedPlanetCardStack
+import com.solarsystem.ui.motion.SolarScrollMetrics
 import com.solarsystem.ui.motion.rememberSolarScrollMetrics
 import com.solarsystem.ui.theme.SolarSystemTheme
 import com.solarsystem.ui.tokens.ScreenDimens
@@ -57,32 +61,16 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
 
         AtmosphereBackdropLayer(progress = metrics.heroProgress)
 
-        AnimatedEarthLayer(
-            progress = metrics.heroProgress,
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { clip = false },
-        )
-
-        HeroHeaderLayer(
-            progress = metrics.heroProgress,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
-
-        SwipeHintFooter(
-            progress = metrics.heroProgress,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
-
-        InterpolatedPlanetCardStack(
-            stackProgress = metrics.stackProgress,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(y = metrics.cardsScreenTop)
+                .align(Alignment.TopCenter)
+                .widthIn(max = ScreenDimens.FrameWidth)
                 .fillMaxWidth()
-                .padding(horizontal = ScreenDimens.CardsHorizontalPadding)
+                .fillMaxHeight()
                 .graphicsLayer { clip = false },
-        )
+        ) {
+            SolarSystemContent(metrics = metrics)
+        }
 
         Box(
             modifier = Modifier
@@ -94,9 +82,47 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun BoxScope.SolarSystemContent(metrics: SolarScrollMetrics) {
+    AnimatedEarthLayer(
+        progress = metrics.heroProgress,
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer { clip = false },
+    )
+
+    HeroHeaderLayer(
+        progress = metrics.heroProgress,
+        modifier = Modifier.align(Alignment.TopCenter),
+    )
+
+    SwipeHintFooter(
+        progress = metrics.heroProgress,
+        modifier = Modifier.align(Alignment.BottomCenter),
+    )
+
+    InterpolatedPlanetCardStack(
+        stackProgress = metrics.stackProgress,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .offset(y = metrics.cardsScreenTop)
+            .fillMaxWidth()
+            .padding(horizontal = ScreenDimens.CardsHorizontalPadding)
+            .graphicsLayer { clip = false },
+    )
+}
+
 @Preview(showBackground = true, widthDp = 360, heightDp = 800)
 @Composable
 private fun SolarSystemScreenPreview() {
+    SolarSystemTheme {
+        SolarSystemScreen()
+    }
+}
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 892)
+@Composable
+private fun SolarSystemScreenWidePreview() {
     SolarSystemTheme {
         SolarSystemScreen()
     }
