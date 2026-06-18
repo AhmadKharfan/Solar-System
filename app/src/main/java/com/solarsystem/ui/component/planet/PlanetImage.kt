@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -31,11 +30,15 @@ internal fun PlanetImage(
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .size(PlanetCardDimens.PlanetWidth, model.imageHeight),
+            .size(
+                PlanetCardDimens.PlanetWidth + glowExtent * 2,
+                model.imageHeight + glowExtent * 2,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
+                .graphicsLayer { clip = false }
                 .size(
                     PlanetCardDimens.PlanetWidth + glowExtent * 2,
                     model.imageHeight + glowExtent * 2,
@@ -51,7 +54,7 @@ internal fun PlanetImage(
             contentDescription = model.name,
             modifier = Modifier
                 .size(PlanetCardDimens.PlanetWidth, model.imageHeight)
-                .alpha(alpha),
+                .graphicsLayer { this.alpha = alpha },
             contentScale = ContentScale.Crop,
         )
     }

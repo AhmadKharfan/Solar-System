@@ -45,7 +45,10 @@ fun PlanetInfoCard(
             modifier = Modifier
                 .zIndex(1f)
                 .align(Alignment.TopStart)
-                .offset(x = PlanetCardDimens.PlanetOffsetX, y = layerStyle.planetOffsetY),
+                .offset(
+                    x = PlanetCardDimens.PlanetOffsetX - PlanetCardDimens.PlanetShadowBlur,
+                    y = layerStyle.planetOffsetY - PlanetCardDimens.PlanetShadowBlur,
+                ),
         )
 
         PlanetCardHeader(
