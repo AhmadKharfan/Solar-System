@@ -78,7 +78,7 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
                         totalDragY += change.positionChange().y
                         if (!transitionStarted && abs(totalDragY) >= touchSlop) {
                             val isExpanded = anchoredProgress.value < 0.5f
-                            val canToggleFromCollapsed = cardsAtFirstStep && !startedInCardSection
+                            val canToggleFromCollapsed = !startedInCardSection
                             if (!isExpanded && !canToggleFromCollapsed) continue
 
                             transitionStarted = true
