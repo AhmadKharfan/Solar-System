@@ -15,17 +15,21 @@ import com.solarsystem.R
 import com.solarsystem.ui.modifier.EarthShadowBleed
 import com.solarsystem.ui.modifier.earthFigmaDropShadow
 import com.solarsystem.ui.modifier.earthPlacement
+import com.solarsystem.ui.motion.SolarMotionProgress
 import com.solarsystem.ui.motion.lerp
 import com.solarsystem.ui.tokens.ScreenDimens
 
 @Composable
 fun AnimatedEarthLayer(
-    progress: Float,
+    motion: SolarMotionProgress,
     modifier: Modifier = Modifier,
 ) {
-    val fraction = progress.coerceIn(0f, 1f)
-    val alpha = lerp(ScreenDimens.EarthStartAlpha, ScreenDimens.EarthEndAlpha, fraction)
-    val scale = lerp(1f, ScreenDimens.EarthEndScale, fraction)
+    val alpha = lerp(
+        ScreenDimens.EarthStartAlpha,
+        ScreenDimens.EarthEndAlpha,
+        motion.earthOpacityProgress,
+    )
+    val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
     val visualSize = ScreenDimens.EarthBaseSize * scale
 
     BoxWithConstraints(
@@ -36,8 +40,10 @@ fun AnimatedEarthLayer(
         val startLeft = maxWidth / 2 - 8.dp - ScreenDimens.EarthBaseSize / 2
         val startTop = maxHeight + ScreenDimens.EarthStartBottomOverflow - ScreenDimens.EarthBaseSize
 
-        val left = lerp(startLeft, ScreenDimens.EarthEndLeft, fraction)
-        val top = lerp(startTop, ScreenDimens.EarthEndTop, fraction)
+        val left = lerp(startLeft, ScreenDimens.EarthEndLeft, motion.earthXProgress)
+        val top = lerp(startTop, ScreenDimens.EarthEndTop, motion.earthYProgress)
+        val translationX = left - startLeft
+        val translationY = top - startTop
 
         val bleed = EarthShadowBleed
 
@@ -58,9 +64,11 @@ fun AnimatedEarthLayer(
 
         Box(
             modifier = Modifier
-                .earthPlacement(left, top, ScreenDimens.EarthBaseSize, ScreenDimens.EarthBaseSize)
+                .earthPlacement(startLeft, startTop, ScreenDimens.EarthBaseSize, ScreenDimens.EarthBaseSize)
                 .graphicsLayer {
                     clip = false
+                    this.translationX = translationX.toPx()
+                    this.translationY = translationY.toPx()
                     scaleX = scale
                     scaleY = scale
                     transformOrigin = TransformOrigin(0f, 0f)

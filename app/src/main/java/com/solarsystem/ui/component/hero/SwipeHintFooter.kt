@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.solarsystem.ui.theme.SolarTypography
@@ -23,11 +24,16 @@ fun SwipeHintFooter(
     progress: Float,
     modifier: Modifier = Modifier,
 ) {
-    val alpha = (1f - progress.coerceIn(0f, 1f))
+    val fraction = progress.coerceIn(0f, 1f)
+    val density = LocalDensity.current
+    val translationY = with(density) {
+        (ScreenDimens.SwipeHintEndTranslationY * fraction).toPx()
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { this.alpha = alpha }
+            .graphicsLayer { this.translationY = translationY }
             .padding(
                 horizontal = ScreenDimens.SwipeHintHorizontalPadding,
                 vertical = ScreenDimens.SwipeHintBottomPadding,

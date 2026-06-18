@@ -3,7 +3,6 @@ package com.solarsystem.ui.component.hero
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
@@ -11,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -24,10 +24,11 @@ fun HeroHeaderLayer(
     modifier: Modifier = Modifier,
 ) {
     val fraction = progress.coerceIn(0f, 1f)
-    val earthAlpha = 1f - fraction
-    val solarAlpha = fraction
     val earthTop = lerp(ScreenDimens.EarthHeroHeaderTop, ScreenDimens.EarthHeroHeaderEndTop, fraction)
     val solarTop = lerp(ScreenDimens.SolarHeroHeaderStartTop, ScreenDimens.SolarHeroHeaderEndTop, fraction)
+    val density = LocalDensity.current
+    val earthTopPx = with(density) { earthTop.toPx() }
+    val solarTopPx = with(density) { solarTop.toPx() }
 
     Box(modifier = modifier.fillMaxWidth()) {
         HeroHeaderBlock(
@@ -38,8 +39,7 @@ fun HeroHeaderLayer(
             modifier = Modifier
                 .width(ScreenDimens.HeroHeaderWidth)
                 .align(Alignment.TopCenter)
-                .offset(y = earthTop)
-                .graphicsLayer { alpha = earthAlpha },
+                .graphicsLayer { translationY = earthTopPx },
         )
         HeroHeaderBlock(
             title = "Our Solar System",
@@ -49,8 +49,7 @@ fun HeroHeaderLayer(
             modifier = Modifier
                 .width(ScreenDimens.HeroHeaderWidth)
                 .align(Alignment.TopCenter)
-                .offset(y = solarTop)
-                .graphicsLayer { alpha = solarAlpha },
+                .graphicsLayer { translationY = solarTopPx },
         )
     }
 }

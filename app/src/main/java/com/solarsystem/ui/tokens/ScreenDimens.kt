@@ -5,9 +5,12 @@ import androidx.compose.ui.unit.dp
 object ScreenDimens {
     val FrameWidth = 360.dp
     val FrameHeight = 800.dp
+    val BackgroundImageSize = 800.dp
+    val BackgroundImageLeft = (-150).dp
+    val BackgroundImageTop = 0.dp
     val HeroScrollRange = 770.dp
-    val CardsStartTop = 1100.dp
-    val CardsEndTop = 330.dp
+    val CardsStartTop = 1114.dp
+    val CardsEndTop = 344.dp
     val HeroScrollTrackHeight = FrameHeight + HeroScrollRange
     val CardsHorizontalPadding = 20.dp
 
@@ -33,4 +36,5 @@ object ScreenDimens {
     val SwipeHintBottomPadding = 20.dp
     val SwipeHintHorizontalPadding = 24.dp
     val SwipeHintGap = 10.dp
+    val SwipeHintEndTranslationY = 300.dp
 }
