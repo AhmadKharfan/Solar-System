@@ -16,8 +16,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.solarsystem.data.PlanetCatalog
 import com.solarsystem.model.PlanetCardModel
+import com.solarsystem.ui.motion.interpolatePlanetStackLayers
 import com.solarsystem.ui.preview.SolarPreviewSurface
 import com.solarsystem.ui.tokens.PlanetCardDimens
+
+@Composable
+fun InterpolatedPlanetCardStack(
+    stackProgress: Float,
+    modifier: Modifier = Modifier,
+    planets: List<PlanetCardModel> = PlanetCatalog.all,
+) {
+    val layers = interpolatePlanetStackLayers(stackProgress)
+
+    Box(
+        modifier = modifier
+            .graphicsLayer { clip = false }
+            .width(PlanetCardDimens.Width)
+            .height(PlanetCardDimens.StackContainerHeight),
+    ) {
+        planets.forEachIndexed { index, planet ->
+            val layer = layers.getOrElse(index) { layers.last() }
+            PlanetInfoCard(
+                model = planet,
+                layerStyle = layer.style,
+                modifier = Modifier
+                    .zIndex((index + 1).toFloat())
+                    .align(Alignment.TopStart)
+                    .offset(y = layer.offsetY),
+            )
+        }
+    }
+}
 
 @Composable
 fun PlanetCardStack(

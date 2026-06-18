@@ -2,7 +2,6 @@ package com.solarsystem.ui.component.planet
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.solarsystem.data.PlanetCatalog
 import com.solarsystem.model.PlanetCardLayerStyle
 import com.solarsystem.model.PlanetCardStackLayer
 import com.solarsystem.ui.theme.SolarColors
@@ -130,6 +129,16 @@ private val StackVariant7Layers = listOf(
     PlanetCardStackLayer(offsetY = 84.dp, style = peekSolidFront()),
 )
 
+internal fun defaultStackLayers(): List<PlanetCardStackLayer> {
+    val pitch = PlanetCardDimens.Height + PlanetCardDimens.ListGap
+    return List(7) { index ->
+        PlanetCardStackLayer(
+            offsetY = pitch * index,
+            style = PlanetCardLayerStyle(),
+        )
+    }
+}
+
 internal fun PlanetCardStackVariant.layers(): List<PlanetCardStackLayer> = when (this) {
     PlanetCardStackVariant.Default -> emptyList()
     PlanetCardStackVariant.Variant2 -> StackVariant2Layers
@@ -140,15 +149,4 @@ internal fun PlanetCardStackVariant.layers(): List<PlanetCardStackLayer> = when 
     PlanetCardStackVariant.Variant7 -> StackVariant7Layers
 }
 
-internal fun PlanetCardStackVariant.containerHeight(): Dp = when (this) {
-    PlanetCardStackVariant.Default -> {
-        val cardCount = PlanetCatalog.all.size
-        PlanetCardDimens.Height * cardCount +
-            PlanetCardDimens.ListGap * (cardCount - 1) +
-            PlanetCardDimens.PlanetOverflowTop
-    }
-    else -> {
-        val lastOffset = layers().last().offsetY
-        lastOffset + PlanetCardDimens.Height + PlanetCardDimens.PlanetOverflowTop
-    }
-}
+internal fun PlanetCardStackVariant.containerHeight(): Dp = PlanetCardDimens.StackContainerHeight
