@@ -53,9 +53,17 @@ private fun PlanetStatsRow(
         horizontalArrangement = Arrangement.spacedBy(PlanetCardDimens.StatsColumnGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PlanetStatCell(stat = left, modifier = Modifier.weight(1f))
+        PlanetStatCell(
+            stat = left,
+            textWidth = PlanetCardDimens.StatsLeftTextWidth,
+            modifier = Modifier.weight(1f),
+        )
         CardDividerVertical()
-        PlanetStatCell(stat = right, modifier = Modifier.weight(1f))
+        PlanetStatCell(
+            stat = right,
+            textWidth = PlanetCardDimens.StatsRightTextWidth,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

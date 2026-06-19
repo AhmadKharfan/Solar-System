@@ -36,22 +36,14 @@ internal fun PlanetImage(
             .size(
                 PlanetCardDimens.PlanetWidth + glowExtent * 2,
                 model.imageHeight + glowExtent * 2,
+            )
+            .planetShadow(
+                glowColor = model.glowColor,
+                planetWidth = PlanetCardDimens.PlanetWidth,
+                planetHeight = model.imageHeight,
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .graphicsLayer { clip = false }
-                .size(
-                    PlanetCardDimens.PlanetWidth + glowExtent * 2,
-                    model.imageHeight + glowExtent * 2,
-                )
-                .planetShadow(
-                    glowColor = model.glowColor,
-                    planetWidth = PlanetCardDimens.PlanetWidth,
-                    planetHeight = model.imageHeight,
-                ),
-        )
         Image(
             painter = painterResource(model.imageRes),
             contentDescription = model.name,
