@@ -53,14 +53,28 @@ fun AnimatedEarthLayer(
                     val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
                     val left = lerp(startLeft, ScreenDimens.EarthEndLeft, motion.earthXProgress)
                     val top = lerp(startTop, ScreenDimens.EarthEndTop, motion.earthYProgress)
-                    translationX = (left - startLeft + bleed * (1f - scale)).toPx()
-                    translationY = (top - startTop + bleed * (1f - scale)).toPx()
-                    scaleX = scale
-                    scaleY = scale
+                    translationX = (left - startLeft).toPx()
+                    translationY = (top - startTop).toPx()
                     transformOrigin = TransformOrigin(0f, 0f)
                     this.alpha = alpha
                 }
-                .earthFigmaDropShadow(discDiameter = ScreenDimens.EarthBaseSize),
+                .earthFigmaDropShadow(
+                    discDiameterProvider = {
+                        val motion = solarMotionProgress(progressProvider())
+                        val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
+                        ScreenDimens.EarthBaseSize * scale
+                    },
+                    shadowAlphaProvider = {
+                        val motion = solarMotionProgress(progressProvider())
+                        val alpha = lerp(
+                            ScreenDimens.EarthStartAlpha,
+                            ScreenDimens.EarthEndAlpha,
+                            motion.earthOpacityProgress,
+                        )
+                        val firstStateCompensation = lerp(0.52f, 1f, motion.earthScaleProgress)
+                        0.25f * alpha * firstStateCompensation
+                    },
+                ),
         )
 
         Box(

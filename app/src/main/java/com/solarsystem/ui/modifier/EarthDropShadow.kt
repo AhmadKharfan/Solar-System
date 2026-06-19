@@ -20,10 +20,40 @@ fun Modifier.earthFigmaDropShadow(
     discDiameter: Dp,
     shadowAlpha: Float = EarthShadowAlpha,
 ): Modifier = drawBehind {
-    val discRadius = discDiameter.toPx() / 2f
-    val blurPx = EarthShadowBlur.toPx()
+    drawEarthShadow(
+        discDiameterPx = discDiameter.toPx(),
+        shadowAlpha = shadowAlpha,
+        blurPx = EarthShadowBlur.toPx(),
+        center = Offset(size.width / 2f, size.height / 2f),
+    )
+}
+
+fun Modifier.earthFigmaDropShadow(
+    discDiameterProvider: () -> Dp,
+    shadowAlphaProvider: () -> Float = { EarthShadowAlpha },
+    shadowBlurProvider: () -> Dp = { EarthShadowBlur },
+): Modifier = drawBehind {
+    val discDiameterPx = discDiameterProvider().toPx()
+    val center = Offset(
+        x = EarthShadowBleed.toPx() + discDiameterPx / 2f,
+        y = EarthShadowBleed.toPx() + discDiameterPx / 2f,
+    )
+    drawEarthShadow(
+        discDiameterPx = discDiameterPx,
+        shadowAlpha = shadowAlphaProvider(),
+        blurPx = shadowBlurProvider().toPx(),
+        center = center,
+    )
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawEarthShadow(
+    discDiameterPx: Float,
+    shadowAlpha: Float,
+    blurPx: Float,
+    center: Offset,
+) {
+    val discRadius = discDiameterPx / 2f
     val offsetY = EarthShadowOffsetY.toPx()
-    val center = Offset(size.width / 2f, size.height / 2f)
     val shadowCenter = Offset(center.x, center.y + offsetY)
     val shadowArgb = EarthShadowColor.copy(alpha = shadowAlpha).toArgb()
 
