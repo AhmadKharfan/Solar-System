@@ -2,6 +2,7 @@ package com.solarsystem.ui.component.planet
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -15,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,6 +42,7 @@ import com.solarsystem.ui.tokens.PlanetCardDimens
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -54,7 +57,9 @@ fun ScrollableInterpolatedPlanetCardStack(
     val motionScope = rememberCoroutineScope()
     val maxStep = (planets.size - 1).coerceAtLeast(1)
     val stepProgress = remember { Animatable(0f) }
+    val cardSettlePhase = remember { Animatable(1f) }
     val settledStep = remember { mutableIntStateOf(0) }
+    val settleDirection = remember { mutableFloatStateOf(0f) }
     val styleStep by remember(maxStep) {
         derivedStateOf {
             stepProgress.value.roundToInt().coerceIn(0, maxStep)
@@ -67,8 +72,14 @@ fun ScrollableInterpolatedPlanetCardStack(
     }
     val snapAnimationSpec = remember {
         tween<Float>(
-            durationMillis = 560,
+            durationMillis = CardSnapDurationMillis,
             easing = CubicBezierEasing(0.18f, 0.0f, 0.08f, 1.0f),
+        )
+    }
+    val settleAnimationSpec = remember {
+        tween<Float>(
+            durationMillis = CardSettleDurationMillis,
+            easing = LinearEasing,
         )
     }
 
@@ -140,6 +151,7 @@ fun ScrollableInterpolatedPlanetCardStack(
 
                         if (isDraggingCard) {
                             change.consume()
+                            settleDirection.floatValue = 0f
                             val draggedStep = (gestureStartProgress - totalDragY / snapDistance)
                                 .coerceIn(0f, maxStep.toFloat())
                             latestDraggedStep = draggedStep
@@ -168,12 +180,27 @@ fun ScrollableInterpolatedPlanetCardStack(
                             .coerceIn(0, maxStep)
 
                         settledStep.intValue = targetStep
+                        val targetStepFloat = targetStep.toFloat()
+                        settleDirection.floatValue = when {
+                            targetStepFloat > latestDraggedStep -> -1f
+                            targetStepFloat < latestDraggedStep -> 1f
+                            else -> 0f
+                        }
                         motionScope.launch {
                             stepProgress.snapTo(latestDraggedStep)
-                            stepProgress.animateTo(
-                                targetValue = targetStep.toFloat(),
-                                animationSpec = snapAnimationSpec,
-                            )
+                            cardSettlePhase.snapTo(0f)
+                            launch {
+                                stepProgress.animateTo(
+                                    targetValue = targetStepFloat,
+                                    animationSpec = snapAnimationSpec,
+                                )
+                            }
+                            launch {
+                                cardSettlePhase.animateTo(
+                                    targetValue = 1f,
+                                    animationSpec = settleAnimationSpec,
+                                )
+                            }
                         }
                     }
                 }
@@ -181,6 +208,11 @@ fun ScrollableInterpolatedPlanetCardStack(
     ) {
         InterpolatedPlanetCardStack(
             motionStackProgressProvider = motionStackProgressProvider,
+            activeCardIndexProvider = {
+                stepProgress.value.roundToInt().coerceIn(0, planets.lastIndex)
+            },
+            settlePhaseProvider = { cardSettlePhase.value },
+            settleDirectionProvider = { settleDirection.floatValue },
             styleStackProgress = 1f - (styleStep / maxStep.toFloat()).coerceIn(0f, 1f),
             planets = planets,
             modifier = Modifier
@@ -212,6 +244,9 @@ fun InterpolatedPlanetCardStack(
     styleStackProgress: Float,
     modifier: Modifier = Modifier,
     planets: List<PlanetCardModel> = PlanetCatalog.all,
+    activeCardIndexProvider: () -> Int = { 0 },
+    settlePhaseProvider: () -> Float = { 1f },
+    settleDirectionProvider: () -> Float = { 0f },
 ) {
     val density = LocalDensity.current
 
@@ -240,12 +275,28 @@ fun InterpolatedPlanetCardStack(
                     .align(Alignment.TopStart)
                     .graphicsLayer {
                         clip = false
+                        val stackProgress = motionStackProgressProvider()
+                        val activeIndex = activeCardIndexProvider()
+                        val settleTranslationY = cardSettleTranslationY(
+                            index = index,
+                            activeIndex = activeIndex,
+                            phase = settlePhaseProvider(),
+                            direction = settleDirectionProvider(),
+                        )
+                        val floatingScale = cardFloatingScale(
+                            index = index,
+                            activeIndex = activeIndex,
+                            stackProgress = stackProgress,
+                            cardCount = planets.size,
+                        )
                         translationY = with(density) {
                             interpolatePlanetStackOffsetY(
                                 index = index,
-                                progress = motionStackProgressProvider(),
+                                progress = stackProgress,
                             ).toPx()
-                        }
+                        } + with(density) { settleTranslationY.toPx() }
+                        scaleX = floatingScale
+                        scaleY = floatingScale
                     },
             )
         }
@@ -330,6 +381,77 @@ private fun stackZIndex(
     val stackedAmount = 1f - stackProgress.coerceIn(0f, 1f)
     val lastCardBoost = if (index == lastIndex && stackedAmount > 0.82f) 100f else 0f
     return index.toFloat() + lastCardBoost
+}
+
+private const val CardSnapDurationMillis = 1020
+private const val CardSettleDurationMillis = 1460
+private const val ActiveCardFloatingScale = 0.004f
+private const val BackgroundCardFloatingScale = 0.0017f
+private val ActiveCardSettleDistance = 5.dp
+
+private fun cardSettleTranslationY(
+    index: Int,
+    activeIndex: Int,
+    phase: Float,
+    direction: Float,
+): androidx.compose.ui.unit.Dp {
+    if (direction == 0f) return 0.dp
+
+    val indexDistance = abs(index - activeIndex)
+    val weight = when (indexDistance) {
+        0 -> 1f
+        1 -> 0.42f
+        2 -> 0.18f
+        else -> 0f
+    }
+    if (weight == 0f) return 0.dp
+
+    val delayedPhase = delayedCardSettlePhase(
+        phase = phase,
+        indexDistance = indexDistance,
+    )
+    val followThrough = settleFollowThrough(delayedPhase)
+    return ActiveCardSettleDistance * direction * weight * followThrough
+}
+
+private fun cardFloatingScale(
+    index: Int,
+    activeIndex: Int,
+    stackProgress: Float,
+    cardCount: Int,
+): Float {
+    if (cardCount <= 1) return 1f
+
+    val fractionalStep = (1f - stackProgress.coerceIn(0f, 1f)) * (cardCount - 1)
+    val travelAmount = 1f - (abs(fractionalStep - fractionalStep.roundToInt()) * 2f).coerceIn(0f, 1f)
+    if (travelAmount == 0f) return 1f
+
+    val activeDistance = abs(index - activeIndex)
+    val scaleAmount = when (activeDistance) {
+        0 -> ActiveCardFloatingScale
+        1 -> BackgroundCardFloatingScale
+        else -> 0f
+    }
+    return 1f + scaleAmount * travelAmount
+}
+
+private fun delayedCardSettlePhase(
+    phase: Float,
+    indexDistance: Int,
+): Float {
+    val delay = indexDistance * 0.045f
+    return ((phase.coerceIn(0f, 1f) - delay) / (1f - delay)).coerceIn(0f, 1f)
+}
+
+private fun settleFollowThrough(phase: Float): Float = when {
+    phase < 0.48f -> 0f
+    phase < 0.76f -> smoothStep((phase - 0.48f) / 0.28f)
+    else -> 1f - smoothStep((phase - 0.76f) / 0.24f)
+}
+
+private fun smoothStep(fraction: Float): Float {
+    val t = fraction.coerceIn(0f, 1f)
+    return t * t * (3f - 2f * t)
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0B1223, widthDp = 360, heightDp = 400)
