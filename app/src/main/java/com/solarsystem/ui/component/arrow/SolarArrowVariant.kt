@@ -11,7 +11,7 @@ enum class SolarArrowVariant {
 
 @DrawableRes
 internal fun SolarArrowVariant.chevronRes(): Int = when (this) {
-    SolarArrowVariant.Default -> R.drawable.ic_arrow_default
-    SolarArrowVariant.Variant2 -> R.drawable.ic_arrow_variant2
-    SolarArrowVariant.Variant3 -> R.drawable.ic_arrow_variant3
+    SolarArrowVariant.Default -> R.drawable.ic_arrow1
+    SolarArrowVariant.Variant2 -> R.drawable.ic_arrow2
+    SolarArrowVariant.Variant3 -> R.drawable.ic_arrow3
 }

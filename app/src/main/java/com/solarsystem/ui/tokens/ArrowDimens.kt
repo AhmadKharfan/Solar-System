@@ -4,7 +4,7 @@ import androidx.compose.ui.unit.dp
 
 object ArrowDimens {
     val SingleSize = 24.dp
-    val SwipeArrowSize = 28.dp
+    val SwipeArrowSize = 24.dp
     val SwipeOverlap = 4.dp
     val SwipeWidth = 24.dp
 

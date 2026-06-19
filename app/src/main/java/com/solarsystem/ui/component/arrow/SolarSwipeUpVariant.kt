@@ -11,23 +11,18 @@ enum class SolarSwipeUpVariant {
     Variant3,
 }
 
+private val swipeUpLayers = listOf(
+    R.drawable.ic_arrow1,
+    R.drawable.ic_arrow2,
+    R.drawable.ic_arrow3,
+)
+
 @DrawableRes
 internal fun SolarSwipeUpVariant.layerRes(): List<Int> = when (this) {
-    SolarSwipeUpVariant.Default -> listOf(
-        R.drawable.ic_swipe_up_default_0,
-        R.drawable.ic_swipe_up_default_1,
-        R.drawable.ic_swipe_up_default_2,
-    )
-    SolarSwipeUpVariant.Variant2 -> listOf(
-        R.drawable.ic_swipe_up_variant2_0,
-        R.drawable.ic_swipe_up_variant2_1,
-        R.drawable.ic_swipe_up_variant2_2,
-    )
-    SolarSwipeUpVariant.Variant3 -> listOf(
-        R.drawable.ic_swipe_up_variant3_0,
-        R.drawable.ic_swipe_up_variant3_1,
-        R.drawable.ic_swipe_up_variant3_2,
-    )
+    SolarSwipeUpVariant.Default,
+    SolarSwipeUpVariant.Variant2,
+    SolarSwipeUpVariant.Variant3,
+    -> swipeUpLayers
 }
 
 internal fun SolarSwipeUpVariant.topPadding(): Dp = if (this == SolarSwipeUpVariant.Default) 8.dp else 0.dp
