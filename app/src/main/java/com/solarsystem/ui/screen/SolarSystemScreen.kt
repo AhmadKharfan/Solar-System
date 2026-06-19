@@ -64,7 +64,7 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val touchSlop = viewConfiguration.touchSlop
-                    val cardSectionTopPx = with(density) { ScreenDimens.CardsEndTop.toPx() }
+                    val cardSectionTopPx = with(density) { ScreenDimens.CardsSectionEndTop.toPx() }
                     val startedInCardSection = down.position.y >= cardSectionTopPx
                     var totalDragY = 0f
                     var transitionStarted = false

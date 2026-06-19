@@ -9,8 +9,10 @@ object ScreenDimens {
     val BackgroundImageLeft = (-150).dp
     val BackgroundImageTop = 0.dp
     val HeroScrollRange = 770.dp
-    val CardsStartTop = 1114.dp
-    val CardsEndTop = 344.dp
+    val CardsSectionStartTop = 1100.dp
+    val CardsSectionEndTop = 330.dp
+    val CardsStartTop = CardsSectionStartTop - PlanetCardDimens.StackTopPadding
+    val CardsEndTop = CardsSectionEndTop - PlanetCardDimens.StackTopPadding
     val HeroScrollTrackHeight = FrameHeight + HeroScrollRange
     val CardsHorizontalPadding = 20.dp
 
