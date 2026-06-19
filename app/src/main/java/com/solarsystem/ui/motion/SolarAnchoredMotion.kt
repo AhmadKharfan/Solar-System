@@ -26,6 +26,7 @@ enum class SolarMotionAnchor {
 val OvershootSpringSpec = spring<Float>(
     dampingRatio = 0.7f,
     stiffness = 25f,
+    visibilityThreshold = 0.001f,
 )
 
 private val CardStackEasing = CubicBezierEasing(0.24f, 0.0f, 0.04f, 1.0f)
