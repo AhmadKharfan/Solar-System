@@ -23,13 +23,16 @@ internal fun PlanetImage(
     model: PlanetCardModel,
     modifier: Modifier = Modifier,
     alpha: Float = 1f,
+    alphaProvider: (() -> Float)? = null,
 ) {
     val glowExtent = PlanetCardDimens.PlanetShadowBlur
-    val glowColor = model.glowColor.copy(alpha = model.glowColor.alpha * alpha)
 
     Box(
         modifier = modifier
-            .graphicsLayer { clip = false }
+            .graphicsLayer {
+                clip = false
+                this.alpha = alphaProvider?.invoke() ?: alpha
+            }
             .size(
                 PlanetCardDimens.PlanetWidth + glowExtent * 2,
                 model.imageHeight + glowExtent * 2,
@@ -44,7 +47,7 @@ internal fun PlanetImage(
                     model.imageHeight + glowExtent * 2,
                 )
                 .planetShadow(
-                    glowColor = glowColor,
+                    glowColor = model.glowColor,
                     planetWidth = PlanetCardDimens.PlanetWidth,
                     planetHeight = model.imageHeight,
                 ),
@@ -53,8 +56,7 @@ internal fun PlanetImage(
             painter = painterResource(model.imageRes),
             contentDescription = model.name,
             modifier = Modifier
-                .size(PlanetCardDimens.PlanetWidth, model.imageHeight)
-                .graphicsLayer { this.alpha = alpha },
+                .size(PlanetCardDimens.PlanetWidth, model.imageHeight),
             contentScale = ContentScale.Crop,
         )
     }

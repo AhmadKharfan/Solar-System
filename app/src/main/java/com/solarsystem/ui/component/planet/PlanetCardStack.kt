@@ -33,17 +33,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.solarsystem.data.PlanetCatalog
 import com.solarsystem.model.PlanetCardModel
-import com.solarsystem.ui.motion.interpolatePlanetStackLayers
+import com.solarsystem.ui.motion.interpolatePlanetCardVisualState
+import com.solarsystem.ui.motion.interpolatePlanetStackOffsetY
 import com.solarsystem.ui.preview.SolarPreviewSurface
 import com.solarsystem.ui.tokens.PlanetCardDimens
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlin.math.min
+import kotlin.math.roundToInt
 
 @Composable
 fun ScrollableInterpolatedPlanetCardStack(
-    entranceStackProgress: Float,
+    entranceStackProgressProvider: () -> Float,
     onFirstStepChanged: (Boolean) -> Unit,
     onRequestScreenExit: () -> Unit,
     modifier: Modifier = Modifier,
@@ -54,12 +55,14 @@ fun ScrollableInterpolatedPlanetCardStack(
     val maxStep = (planets.size - 1).coerceAtLeast(1)
     val stepProgress = remember { Animatable(0f) }
     val settledStep = remember { mutableIntStateOf(0) }
-    val stackProgress by remember(entranceStackProgress, maxStep) {
+    val styleStep by remember(maxStep) {
         derivedStateOf {
-            min(
-                entranceStackProgress.coerceIn(0f, 1f),
-                1f - (stepProgress.value / maxStep.toFloat()).coerceIn(0f, 1f),
-            )
+            stepProgress.value.roundToInt().coerceIn(0, maxStep)
+        }
+    }
+    val motionStackProgressProvider = remember(maxStep) {
+        {
+            1f - (stepProgress.value / maxStep.toFloat()).coerceIn(0f, 1f)
         }
     }
     val snapAnimationSpec = remember {
@@ -80,25 +83,24 @@ fun ScrollableInterpolatedPlanetCardStack(
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .pointerInput(maxStep, entranceStackProgress, density) {
+            .pointerInput(maxStep, density) {
                 val snapDistance = PlanetCardDimens.SnapDragDistance.toPx()
                 val distanceThreshold = PlanetCardDimens.SnapDistanceThreshold.toPx()
                 val velocityThreshold = PlanetCardDimens.SnapVelocityThreshold.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    val entranceStackProgress = entranceStackProgressProvider()
                     if (entranceStackProgress < 0.95f) return@awaitEachGesture
 
                     val velocityTracker = VelocityTracker()
                     velocityTracker.addPosition(down.uptimeMillis, down.position)
                     val gestureStartStep = settledStep.intValue
                     val gestureStartProgress = stepProgress.value
+                    val currentStackProgress = 1f - (stepProgress.value / maxStep.toFloat()).coerceIn(0f, 1f)
                     val hitCardBody = with(density) {
                         isCardBodyHit(
                             position = down.position,
-                            stackProgress = min(
-                                entranceStackProgress.coerceIn(0f, 1f),
-                                1f - (stepProgress.value / maxStep.toFloat()).coerceIn(0f, 1f),
-                            ),
+                            stackProgress = currentStackProgress,
                             planets = planets,
                         )
                     }
@@ -178,7 +180,8 @@ fun ScrollableInterpolatedPlanetCardStack(
             },
     ) {
         InterpolatedPlanetCardStack(
-            stackProgress = stackProgress,
+            motionStackProgressProvider = motionStackProgressProvider,
+            styleStackProgress = 1f - (styleStep / maxStep.toFloat()).coerceIn(0f, 1f),
             planets = planets,
             modifier = Modifier
                 .padding(top = PlanetCardDimens.StackTopPadding)
@@ -197,21 +200,19 @@ private fun Density.isCardBodyHit(
 
     val topPadding = PlanetCardDimens.StackTopPadding.toPx()
     val cardHeight = PlanetCardDimens.Height.toPx()
-    val layers = interpolatePlanetStackLayers(stackProgress)
     return planets.indices.any { index ->
-        val layer = layers.getOrElse(index) { layers.last() }
-        val top = topPadding + layer.offsetY.toPx()
+        val top = topPadding + interpolatePlanetStackOffsetY(index, stackProgress).toPx()
         position.y in top..(top + cardHeight)
     }
 }
 
 @Composable
 fun InterpolatedPlanetCardStack(
-    stackProgress: Float,
+    motionStackProgressProvider: () -> Float,
+    styleStackProgress: Float,
     modifier: Modifier = Modifier,
     planets: List<PlanetCardModel> = PlanetCatalog.all,
 ) {
-    val layers = interpolatePlanetStackLayers(stackProgress)
     val density = LocalDensity.current
 
     Box(
@@ -221,22 +222,30 @@ fun InterpolatedPlanetCardStack(
             .height(PlanetCardDimens.StackContainerHeight),
     ) {
         planets.forEachIndexed { index, planet ->
-            val layer = layers.getOrElse(index) { layers.last() }
-            val offsetYPx = with(density) { layer.offsetY.toPx() }
             val zIndex = stackZIndex(
                 index = index,
                 lastIndex = planets.lastIndex,
-                stackProgress = stackProgress,
+                stackProgress = styleStackProgress,
             )
             PlanetInfoCard(
                 model = planet,
-                layerStyle = layer.style,
+                visualStateProvider = {
+                    interpolatePlanetCardVisualState(
+                        index = index,
+                        progress = motionStackProgressProvider(),
+                    )
+                },
                 modifier = Modifier
                     .zIndex(zIndex)
                     .align(Alignment.TopStart)
                     .graphicsLayer {
                         clip = false
-                        translationY = offsetYPx
+                        translationY = with(density) {
+                            interpolatePlanetStackOffsetY(
+                                index = index,
+                                progress = motionStackProgressProvider(),
+                            ).toPx()
+                        }
                     },
             )
         }
