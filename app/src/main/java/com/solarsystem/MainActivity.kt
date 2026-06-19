@@ -10,8 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -35,17 +36,12 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -67,6 +63,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -75,13 +72,14 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.PlatformTextStyle
@@ -99,6 +97,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -113,9 +112,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
         setContent {
-            SolarSystemTheme {
-                SolarSystemScreen(modifier = Modifier.fillMaxSize())
-            }
+            SolarSystemScreen(modifier = Modifier.fillMaxSize())
         }
     }
 }
@@ -123,35 +120,6 @@ class MainActivity : ComponentActivity() {
 /*
  * Theme / Colors / Fonts
  */
-
-private val Purple80 = Color(0xFFD0BCFF)
-private val PurpleGrey80 = Color(0xFFCCC2DC)
-private val Pink80 = Color(0xFFEFB8C8)
-private val Purple40 = Color(0xFF6650A4)
-private val PurpleGrey40 = Color(0xFF625B71)
-private val Pink40 = Color(0xFF7D5260)
-
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80,
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-)
-
-private val MaterialTypography = Typography(
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp,
-    ),
-)
 
 private val RubikFontFamily = FontFamily(
     Font(R.font.rubik_regular, FontWeight.Normal),
@@ -162,14 +130,28 @@ private val RubikFontFamily = FontFamily(
 private val LilyScriptFontFamily = FontFamily(Font(R.font.lily_script_one, FontWeight.Normal))
 
 private object SolarColors {
+    val BackgroundBase = Color(0xFF0D0608)
     val CardBackground = Color(0xCC0B1223)
     val CardBackgroundSolid = Color(0xFF0B1223)
     val CardBorder = Color(0xFF2F2E2E)
     val TextPrimary = Color(0xE0FFFFFF)
     val TextSecondary = Color(0xA8FFFFFF)
     val TextShadow = Color(0x29FFFFFF)
-    val ArrowBlueGlow = Color(0x524197E7)
+    val HeroSubtitle = Color(0xCCFFFFFF)
+    val SwipeHintText = Color.White
+    val EarthShadow = Color(0xFF4197E7)
     val SwipeHintArrowGlow = Color(0x70FFFFFF)
+    val SwipeHintTextShadow = Color(0x70FFFFFF)
+
+    object BackgroundGradient {
+        val Transparent = Color(0x00000000)
+        val StartDeepSpace = Color(0xFF060816)
+        val StartMidnight = Color(0xFF0F172A)
+        val StartBlue = Color(0xFF020D3C)
+        val EndViolet = Color(0xFF1E1B4B)
+        val EndMidnight = Color(0xFF0F172A)
+        val EndBlack = Color(0xFF030712)
+    }
 
     object PlanetGlow {
         val Saturn = Color(0x80AB4F20)
@@ -271,7 +253,7 @@ private object SolarTypography {
         fontSize = 16.sp,
         lineHeight = 22.sp,
         letterSpacing = 0.25.sp,
-        color = Color(0xCCFFFFFF),
+        color = SolarColors.HeroSubtitle,
         platformStyle = FigmaPlatformStyle,
     )
 
@@ -281,36 +263,13 @@ private object SolarTypography {
         fontSize = 16.sp,
         lineHeight = 19.sp,
         letterSpacing = 0.25.sp,
-        color = Color.White,
+        color = SolarColors.SwipeHintText,
         shadow = Shadow(
-            color = Color(0x70FFFFFF),
+            color = SolarColors.SwipeHintTextShadow,
             offset = Offset(0f, 4f),
             blurRadius = 16f,
         ),
         platformStyle = FigmaPlatformStyle,
-    )
-}
-
-@Composable
-private fun SolarSystemTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit,
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = MaterialTypography,
-        content = content,
     )
 }
 
@@ -327,7 +286,6 @@ private object ArrowDimens {
 }
 
 private object PlanetCardDimens {
-    val Width = 328.dp
     val Height = 242.dp
     val CornerRadius = 20.dp
     val BorderWidth = 0.5.dp
@@ -350,8 +308,6 @@ private object PlanetCardDimens {
     val StatsRowGap = 16.dp
     val StatsRowPaddingX = 16.dp
     val StatsColumnGap = 16.dp
-    val StatsLeftTextWidth = 103.dp
-    val StatsRightTextWidth = 76.dp
     val IconSize = 20.dp
     val IconTextGap = 8.dp
     val LabelValueGap = 4.dp
@@ -373,16 +329,16 @@ private object ScreenDimens {
     val CardsSectionEndTop = 330.dp
     val CardsStartTop = CardsSectionStartTop - PlanetCardDimens.StackTopPadding
     val CardsEndTop = CardsSectionEndTop - PlanetCardDimens.StackTopPadding
-    val CardsHorizontalPadding = 20.dp
+    val CardsHorizontalPadding = 16.dp
     val EarthBaseSize = 644.dp
     val EarthStartBottomOverflow = 124.dp
     val EarthEndLeft = 80.dp
     val EarthEndTop = 76.dp
-    val EarthEndScale = 200f / 644f
-    val EarthStartAlpha = 1f
-    val EarthEndAlpha = 0.5f
-    val AtmosphereStartAlpha = 0.66f
-    val AtmosphereEndAlpha = 1f
+    const val EarthEndScale = 200f / 644f
+    const val EarthStartAlpha = 1f
+    const val EarthEndAlpha = 0.5f
+    const val AtmosphereStartAlpha = 0.66f
+    const val AtmosphereEndAlpha = 1f
     val EarthHeroHeaderTop = 96.dp
     val EarthHeroHeaderEndTop = (-354).dp
     val SolarHeroHeaderStartTop = (-224).dp
@@ -398,12 +354,10 @@ private object ScreenDimens {
 private const val PeekPlanetAlpha = 0.32f
 private val EarthSwipeVelocityThreshold = 850.dp
 private val TextLayerBleed = 14.dp
-private val EarthShadowColor = Color(0xFF4197E7)
 private const val EarthShadowAlpha = 0.25f
 private val EarthShadowOffsetY = (-12).dp
 private val EarthShadowBlur = 50.dp
 private val EarthShadowBleed = 62.dp
-private val BaseSurface = Color(0xFF0D0608)
 private const val CardSnapDurationMillis = 1020
 private const val CardSettleDurationMillis = 1460
 private const val ActiveCardFloatingScale = 0.004f
@@ -585,87 +539,138 @@ private fun SolarSystemScreen(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .graphicsLayer { clip = false }
-            .pointerInput(cardsAtFirstStep, density) {
-                val dragRangePx = with(density) { ScreenDimens.HeroScrollRange.toPx() }
-                    .coerceAtLeast(1f)
-                val swipeVelocityThresholdPx = with(density) { EarthSwipeVelocityThreshold.toPx() }
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val touchSlop = viewConfiguration.touchSlop
-                    val cardSectionTopPx = with(density) { ScreenDimens.CardsSectionEndTop.toPx() }
-                    val startedInCardSection = down.position.y >= cardSectionTopPx
-                    val velocityTracker = VelocityTracker()
-                    velocityTracker.addPosition(down.uptimeMillis, down.position)
-                    val gestureStartProgress = anchoredProgress.value.coerceIn(0f, 1f)
-                    var latestProgress = gestureStartProgress
-                    var totalDragY = 0f
-                    var draggingScreenMotion = false
-                    var progressSnapJob: Job? = null
-
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-
-                        totalDragY += change.positionChange().y
-                        velocityTracker.addPosition(change.uptimeMillis, change.position)
-                        if (!draggingScreenMotion && abs(totalDragY) >= touchSlop) {
-                            val isDraggingTowardCards = totalDragY < 0f
-                            val isDraggingTowardHero = totalDragY > 0f
-                            val canMoveProgress = when {
-                                isDraggingTowardCards -> gestureStartProgress < 1f
-                                isDraggingTowardHero -> gestureStartProgress > 0f
-                                else -> false
-                            }
-                            val startedInSettledCards = startedInCardSection && gestureStartProgress >= 0.95f
-                            val canDriveScreenMotion = if (startedInSettledCards) {
-                                cardsAtFirstStep && isDraggingTowardHero
-                            } else {
-                                canMoveProgress
-                            }
-
-                            if (!canDriveScreenMotion) continue
-
-                            draggingScreenMotion = true
-                            progressSnapJob?.cancel()
-                        }
-
-                        if (draggingScreenMotion) {
-                            change.consume()
-                            latestProgress = (gestureStartProgress - totalDragY / dragRangePx)
-                                .coerceIn(0f, 1f)
-                            progressSnapJob?.cancel()
-                            progressSnapJob = scope.launch {
-                                anchoredProgress.snapTo(latestProgress)
-                            }
-                        }
-                    }
-
-                    if (draggingScreenMotion) {
-                        progressSnapJob?.cancel()
-                        val velocityY = velocityTracker.calculateVelocity().y
-                        val target = when {
-                            velocityY <= -swipeVelocityThresholdPx -> SolarMotionAnchor.Collapsed
-                            velocityY >= swipeVelocityThresholdPx -> SolarMotionAnchor.Expanded
-                            latestProgress >= 0.5f -> SolarMotionAnchor.Collapsed
-                            else -> SolarMotionAnchor.Expanded
-                        }
-                        scope.launch {
-                            anchoredProgress.snapTo(latestProgress)
-                            anchoredProgress.animateTo(
-                                targetValue = target.progressValue(),
-                                animationSpec = OvershootSpringSpec,
-                            )
-                        }
-                    }
-                }
-            },
+            .screenMotionDrag(
+                cardsAtFirstStep = cardsAtFirstStep,
+                density = density,
+                scope = scope,
+                anchoredProgress = anchoredProgress,
+            ),
     ) {
         SolarMotionScene(
             progressProvider = { anchoredProgress.value },
             onCardsAtFirstStepChanged = { cardsAtFirstStep = it },
         )
     }
+}
+
+private fun Modifier.screenMotionDrag(
+    cardsAtFirstStep: Boolean,
+    density: Density,
+    scope: CoroutineScope,
+    anchoredProgress: Animatable<Float, AnimationVector1D>,
+): Modifier = pointerInput(cardsAtFirstStep, density) {
+    val dragRangePx = with(density) { ScreenDimens.HeroScrollRange.toPx() }.coerceAtLeast(1f)
+    val swipeVelocityThresholdPx = with(density) { EarthSwipeVelocityThreshold.toPx() }
+    val cardSectionTopPx = with(density) { ScreenDimens.CardsSectionEndTop.toPx() }
+
+    awaitEachGesture {
+        handleScreenMotionGesture(
+            cardsAtFirstStep = cardsAtFirstStep,
+            dragRangePx = dragRangePx,
+            swipeVelocityThresholdPx = swipeVelocityThresholdPx,
+            cardSectionTopPx = cardSectionTopPx,
+            scope = scope,
+            anchoredProgress = anchoredProgress,
+        )
+    }
+}
+
+private suspend fun AwaitPointerEventScope.handleScreenMotionGesture(
+    cardsAtFirstStep: Boolean,
+    dragRangePx: Float,
+    swipeVelocityThresholdPx: Float,
+    cardSectionTopPx: Float,
+    scope: CoroutineScope,
+    anchoredProgress: Animatable<Float, AnimationVector1D>,
+) {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    val velocityTracker = VelocityTracker()
+    velocityTracker.addPosition(down.uptimeMillis, down.position)
+
+    val gestureStartProgress = anchoredProgress.value.coerceIn(0f, 1f)
+    val startedInCardSection = down.position.y >= cardSectionTopPx
+    var latestProgress = gestureStartProgress
+    var totalDragY = 0f
+    var draggingScreenMotion = false
+    var progressSnapJob: Job? = null
+
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+        if (!change.pressed) break
+
+        totalDragY += change.positionChange().y
+        velocityTracker.addPosition(change.uptimeMillis, change.position)
+        if (!draggingScreenMotion && abs(totalDragY) >= viewConfiguration.touchSlop) {
+            if (!canStartScreenMotion(
+                    totalDragY = totalDragY,
+                    gestureStartProgress = gestureStartProgress,
+                    startedInCardSection = startedInCardSection,
+                    cardsAtFirstStep = cardsAtFirstStep,
+                )
+            ) {
+                continue
+            }
+            draggingScreenMotion = true
+        }
+
+        if (draggingScreenMotion) {
+            change.consume()
+            latestProgress = (gestureStartProgress - totalDragY / dragRangePx).coerceIn(0f, 1f)
+            progressSnapJob?.cancel()
+            progressSnapJob = scope.launch {
+                anchoredProgress.snapTo(latestProgress)
+            }
+        }
+    }
+
+    if (!draggingScreenMotion) return
+
+    progressSnapJob?.cancel()
+    val target = targetScreenAnchor(
+        velocityY = velocityTracker.calculateVelocity().y,
+        velocityThresholdPx = swipeVelocityThresholdPx,
+        latestProgress = latestProgress,
+    )
+    scope.launch {
+        anchoredProgress.snapTo(latestProgress)
+        anchoredProgress.animateTo(
+            targetValue = target.progressValue(),
+            animationSpec = OvershootSpringSpec,
+        )
+    }
+}
+
+private fun canStartScreenMotion(
+    totalDragY: Float,
+    gestureStartProgress: Float,
+    startedInCardSection: Boolean,
+    cardsAtFirstStep: Boolean,
+): Boolean {
+    val isDraggingTowardCards = totalDragY < 0f
+    val isDraggingTowardHero = totalDragY > 0f
+    val canMoveProgress = when {
+        isDraggingTowardCards -> gestureStartProgress < 1f
+        isDraggingTowardHero -> gestureStartProgress > 0f
+        else -> false
+    }
+    val startedInSettledCards = startedInCardSection && gestureStartProgress >= 0.95f
+    return if (startedInSettledCards) {
+        cardsAtFirstStep && isDraggingTowardHero
+    } else {
+        canMoveProgress
+    }
+}
+
+private fun targetScreenAnchor(
+    velocityY: Float,
+    velocityThresholdPx: Float,
+    latestProgress: Float,
+) = when {
+    velocityY <= -velocityThresholdPx -> SolarMotionAnchor.Collapsed
+    velocityY >= velocityThresholdPx -> SolarMotionAnchor.Expanded
+    latestProgress >= 0.5f -> SolarMotionAnchor.Collapsed
+    else -> SolarMotionAnchor.Expanded
 }
 
 @Composable
@@ -686,18 +691,19 @@ private fun BoxScope.SolarMotionScene(
     ) {
         SolarSystemContent(
             progressProvider = progressProvider,
-            onCardsAtFirstStepChanged = onCardsAtFirstStepChanged,
         )
     }
+
+    PlanetCardsLayer(
+        progressProvider = progressProvider,
+        onCardsAtFirstStepChanged = onCardsAtFirstStepChanged,
+    )
 }
 
 @Composable
 private fun BoxScope.SolarSystemContent(
     progressProvider: () -> Float,
-    onCardsAtFirstStepChanged: (Boolean) -> Unit,
 ) {
-    val density = LocalDensity.current
-
     AnimatedEarthLayer(
         progressProvider = progressProvider,
         modifier = Modifier
@@ -718,6 +724,14 @@ private fun BoxScope.SolarSystemContent(
         },
         modifier = Modifier.align(Alignment.BottomCenter),
     )
+}
+
+@Composable
+private fun BoxScope.PlanetCardsLayer(
+    progressProvider: () -> Float,
+    onCardsAtFirstStepChanged: (Boolean) -> Unit,
+) {
+    val density = LocalDensity.current
 
     ScrollableInterpolatedPlanetCardStack(
         entranceStackProgressProvider = {
@@ -754,7 +768,7 @@ private fun ScreenBackground(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(BaseSurface),
+                .background(SolarColors.BackgroundBase),
         )
         Box(
             modifier = Modifier
@@ -816,7 +830,7 @@ private fun AtmosphereBackdropLayer(
                     .fillMaxSize()
                     .graphicsLayer {
                         clip = false
-                        alpha = lerp(
+                        alpha = interpolate(
                             ScreenDimens.AtmosphereStartAlpha,
                             ScreenDimens.AtmosphereEndAlpha,
                             progressProvider().coerceIn(0f, 1f),
@@ -837,82 +851,125 @@ private fun AnimatedEarthLayer(
             .fillMaxSize()
             .graphicsLayer { clip = false },
     ) {
-        val startLeft = maxWidth / 2 - 8.dp - ScreenDimens.EarthBaseSize / 2
-        val startTop = maxHeight + ScreenDimens.EarthStartBottomOverflow - ScreenDimens.EarthBaseSize
-
-        Box(
-            modifier = Modifier
-                .earthPlacement(
-                    left = startLeft - EarthShadowBleed,
-                    top = startTop - EarthShadowBleed,
-                    width = ScreenDimens.EarthBaseSize + EarthShadowBleed * 2,
-                    height = ScreenDimens.EarthBaseSize + EarthShadowBleed * 2,
-                )
-                .graphicsLayer {
-                    clip = false
-                    val motion = solarMotionProgress(progressProvider())
-                    val alpha = lerp(
-                        ScreenDimens.EarthStartAlpha,
-                        ScreenDimens.EarthEndAlpha,
-                        motion.earthOpacityProgress,
-                    )
-                    val left = lerp(startLeft, ScreenDimens.EarthEndLeft, motion.earthXProgress)
-                    val top = lerp(startTop, ScreenDimens.EarthEndTop, motion.earthYProgress)
-                    translationX = (left - startLeft).toPx()
-                    translationY = (top - startTop).toPx()
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    this.alpha = alpha
-                }
-                .earthFigmaDropShadow(
-                    discDiameterProvider = {
-                        val motion = solarMotionProgress(progressProvider())
-                        val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
-                        ScreenDimens.EarthBaseSize * scale
-                    },
-                    shadowAlphaProvider = {
-                        val motion = solarMotionProgress(progressProvider())
-                        val alpha = lerp(
-                            ScreenDimens.EarthStartAlpha,
-                            ScreenDimens.EarthEndAlpha,
-                            motion.earthOpacityProgress,
-                        )
-                        val firstStateCompensation = lerp(0.52f, 1f, motion.earthScaleProgress)
-                        0.25f * alpha * firstStateCompensation
-                    },
-                ),
+        val startBounds = earthStartBounds(maxWidth = maxWidth, maxHeight = maxHeight)
+        EarthShadowLayer(
+            startBounds = startBounds,
+            progressProvider = progressProvider,
         )
-
-        Box(
-            modifier = Modifier
-                .earthPlacement(startLeft, startTop, ScreenDimens.EarthBaseSize, ScreenDimens.EarthBaseSize)
-                .graphicsLayer {
-                    clip = false
-                    val motion = solarMotionProgress(progressProvider())
-                    val alpha = lerp(
-                        ScreenDimens.EarthStartAlpha,
-                        ScreenDimens.EarthEndAlpha,
-                        motion.earthOpacityProgress,
-                    )
-                    val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
-                    val left = lerp(startLeft, ScreenDimens.EarthEndLeft, motion.earthXProgress)
-                    val top = lerp(startTop, ScreenDimens.EarthEndTop, motion.earthYProgress)
-                    translationX = (left - startLeft).toPx()
-                    translationY = (top - startTop).toPx()
-                    scaleX = scale
-                    scaleY = scale
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    this.alpha = alpha
-                },
-        ) {
-            Image(
-                painter = painterResource(R.drawable.img_earth),
-                contentDescription = "Earth",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        EarthImageLayer(
+            startBounds = startBounds,
+            progressProvider = progressProvider,
+        )
     }
 }
+
+@Composable
+private fun EarthShadowLayer(
+    startBounds: EarthStartBounds,
+    progressProvider: () -> Float,
+) {
+    Box(
+        modifier = Modifier
+            .earthPlacement(
+                left = startBounds.left - EarthShadowBleed,
+                top = startBounds.top - EarthShadowBleed,
+                width = ScreenDimens.EarthBaseSize + EarthShadowBleed * 2,
+                height = ScreenDimens.EarthBaseSize + EarthShadowBleed * 2,
+            )
+            .graphicsLayer {
+                applyEarthMotion(
+                    progressProvider = progressProvider,
+                    startBounds = startBounds,
+                    scaleImage = false,
+                )
+            }
+            .earthFigmaDropShadow(
+                discDiameterProvider = { earthDiscDiameter(progressProvider()) },
+                shadowAlphaProvider = { earthShadowAlpha(progressProvider()) },
+            ),
+    )
+}
+
+@Composable
+private fun EarthImageLayer(
+    startBounds: EarthStartBounds,
+    progressProvider: () -> Float,
+) {
+    Box(
+        modifier = Modifier
+            .earthPlacement(
+                left = startBounds.left,
+                top = startBounds.top,
+                width = ScreenDimens.EarthBaseSize,
+                height = ScreenDimens.EarthBaseSize,
+            )
+            .graphicsLayer {
+                applyEarthMotion(
+                    progressProvider = progressProvider,
+                    startBounds = startBounds,
+                    scaleImage = true,
+                )
+            },
+    ) {
+        Image(
+            painter = painterResource(R.drawable.img_earth),
+            contentDescription = "Earth",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+private data class EarthStartBounds(
+    val left: Dp,
+    val top: Dp,
+)
+
+private fun earthStartBounds(maxWidth: Dp, maxHeight: Dp) = EarthStartBounds(
+    left = maxWidth / 2 - 8.dp - ScreenDimens.EarthBaseSize / 2,
+    top = maxHeight + ScreenDimens.EarthStartBottomOverflow - ScreenDimens.EarthBaseSize,
+)
+
+private fun GraphicsLayerScope.applyEarthMotion(
+    progressProvider: () -> Float,
+    startBounds: EarthStartBounds,
+    scaleImage: Boolean,
+) {
+    clip = false
+    val motion = solarMotionProgress(progressProvider())
+    val alpha = earthAlpha(motion)
+    val scale = earthScale(motion)
+    val left = interpolate(startBounds.left, ScreenDimens.EarthEndLeft, motion.earthXProgress)
+    val top = interpolate(startBounds.top, ScreenDimens.EarthEndTop, motion.earthYProgress)
+
+    translationX = (left - startBounds.left).toPx()
+    translationY = (top - startBounds.top).toPx()
+    transformOrigin = TransformOrigin(0f, 0f)
+    this.alpha = alpha
+    if (scaleImage) {
+        scaleX = scale
+        scaleY = scale
+    }
+}
+
+private fun earthDiscDiameter(progress: Float): Dp =
+    ScreenDimens.EarthBaseSize * earthScale(solarMotionProgress(progress))
+
+private fun earthShadowAlpha(progress: Float): Float {
+    val motion = solarMotionProgress(progress)
+    val firstStateCompensation = interpolate(0.52f, 1f, motion.earthScaleProgress)
+    return EarthShadowAlpha * earthAlpha(motion) * firstStateCompensation
+}
+
+private fun earthAlpha(motion: SolarMotionProgress): Float =
+    interpolate(
+        ScreenDimens.EarthStartAlpha,
+        ScreenDimens.EarthEndAlpha,
+        motion.earthOpacityProgress,
+    )
+
+private fun earthScale(motion: SolarMotionProgress): Float =
+    interpolate(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
 
 @Composable
 private fun HeroHeaderLayer(
@@ -932,7 +989,7 @@ private fun HeroHeaderLayer(
                 .align(Alignment.TopCenter)
                 .graphicsLayer {
                     translationY = with(density) {
-                        lerp(
+                        interpolate(
                             ScreenDimens.EarthHeroHeaderTop,
                             ScreenDimens.EarthHeroHeaderEndTop,
                             progressProvider(),
@@ -950,7 +1007,7 @@ private fun HeroHeaderLayer(
                 .align(Alignment.TopCenter)
                 .graphicsLayer {
                     translationY = with(density) {
-                        lerp(
+                        interpolate(
                             ScreenDimens.SolarHeroHeaderStartTop,
                             ScreenDimens.SolarHeroHeaderEndTop,
                             progressProvider(),
@@ -1036,7 +1093,7 @@ private fun SwipeHintFooter(
 private fun SwipeArrowLayer(
     @DrawableRes res: Int,
     modifier: Modifier = Modifier,
-    glowColor: Color = SolarColors.ArrowBlueGlow,
+    glowColor: Color,
     arrowSize: Dp = ArrowDimens.SwipeArrowSize,
 ) {
     val usesBlurShadow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -1095,17 +1152,17 @@ private fun ScrollableInterpolatedPlanetCardStack(
     }
     val motionStackProgressProvider = remember(maxStep) {
         {
-            1f - (stepProgress.value / maxStep.toFloat()).coerceIn(0f, 1f)
+            currentStackProgress(stepProgress.value, maxStep)
         }
     }
-    val snapAnimationSpec = remember {
-        tween<Float>(
+    val snapAnimationSpec: AnimationSpec<Float> = remember {
+        tween(
             durationMillis = CardSnapDurationMillis,
             easing = CubicBezierEasing(0.18f, 0.0f, 0.08f, 1.0f),
         )
     }
-    val settleAnimationSpec = remember {
-        tween<Float>(
+    val settleAnimationSpec: AnimationSpec<Float> = remember {
+        tween(
             durationMillis = CardSettleDurationMillis,
             easing = LinearEasing,
         )
@@ -1122,114 +1179,19 @@ private fun ScrollableInterpolatedPlanetCardStack(
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .pointerInput(maxStep, density) {
-                val snapDistance = PlanetCardDimens.SnapDragDistance.toPx()
-                val distanceThreshold = PlanetCardDimens.SnapDistanceThreshold.toPx()
-                val velocityThreshold = PlanetCardDimens.SnapVelocityThreshold.toPx()
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val entranceStackProgress = entranceStackProgressProvider()
-                    if (entranceStackProgress < 0.95f) return@awaitEachGesture
-
-                    val velocityTracker = VelocityTracker()
-                    velocityTracker.addPosition(down.uptimeMillis, down.position)
-                    val gestureStartStep = settledStep.intValue
-                    val gestureStartProgress = stepProgress.value
-                    val currentStackProgress = 1f - (stepProgress.value / maxStep.toFloat()).coerceIn(0f, 1f)
-                    val hitCardBody = with(density) {
-                        isCardBodyHit(
-                            position = down.position,
-                            stackProgress = currentStackProgress,
-                            planets = planets,
-                        )
-                    }
-                    var totalDragY = 0f
-                    var isDraggingCard = false
-                    var dragSnapJob: Job? = null
-                    var latestDraggedStep = gestureStartProgress
-
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-
-                        val dragY = change.positionChange().y
-                        totalDragY += dragY
-                        velocityTracker.addPosition(change.uptimeMillis, change.position)
-
-                        if (!isDraggingCard && abs(totalDragY) >= viewConfiguration.touchSlop) {
-                            val targetDirection = when {
-                                totalDragY < 0f -> 1
-                                totalDragY > 0f -> -1
-                                else -> 0
-                            }
-                            val canMoveCard = hitCardBody &&
-                                (gestureStartStep + targetDirection).coerceIn(0, maxStep) != gestureStartStep
-
-                            if (canMoveCard) {
-                                isDraggingCard = true
-                            } else {
-                                change.consume()
-                                break
-                            }
-                        }
-
-                        if (isDraggingCard) {
-                            change.consume()
-                            settleDirection.floatValue = 0f
-                            val draggedStep = (gestureStartProgress - totalDragY / snapDistance)
-                                .coerceIn(0f, maxStep.toFloat())
-                            latestDraggedStep = draggedStep
-                            dragSnapJob?.cancel()
-                            dragSnapJob = motionScope.launch {
-                                stepProgress.snapTo(draggedStep)
-                            }
-                        }
-                    }
-
-                    if (isDraggingCard) {
-                        dragSnapJob?.cancel()
-                        val velocityY = velocityTracker.calculateVelocity().y
-                        val distanceStep = latestDraggedStep - gestureStartStep.toFloat()
-                        val velocityStep = when {
-                            velocityY <= -velocityThreshold -> 1
-                            velocityY >= velocityThreshold -> -1
-                            else -> 0
-                        }
-                        val thresholdStep = when {
-                            distanceStep >= distanceThreshold / snapDistance -> 1
-                            distanceStep <= -distanceThreshold / snapDistance -> -1
-                            else -> 0
-                        }
-                        val targetStep = (gestureStartStep + if (velocityStep != 0) velocityStep else thresholdStep)
-                            .coerceIn(0, maxStep)
-
-                        settledStep.intValue = targetStep
-                        val targetStepFloat = targetStep.toFloat()
-                        settleDirection.floatValue = when {
-                            targetStepFloat > latestDraggedStep -> -1f
-                            targetStepFloat < latestDraggedStep -> 1f
-                            else -> 0f
-                        }
-                        motionScope.launch {
-                            stepProgress.snapTo(latestDraggedStep)
-                            cardSettlePhase.snapTo(0f)
-                            launch {
-                                stepProgress.animateTo(
-                                    targetValue = targetStepFloat,
-                                    animationSpec = snapAnimationSpec,
-                                )
-                            }
-                            launch {
-                                cardSettlePhase.animateTo(
-                                    targetValue = 1f,
-                                    animationSpec = settleAnimationSpec,
-                                )
-                            }
-                        }
-                    }
-                }
-            },
+            .planetCardStackDrag(
+                entranceStackProgressProvider = entranceStackProgressProvider,
+                planets = planets,
+                maxStep = maxStep,
+                density = density,
+                motionScope = motionScope,
+                stepProgress = stepProgress,
+                cardSettlePhase = cardSettlePhase,
+                settledStep = settledStep,
+                settleDirection = settleDirection,
+                snapAnimationSpec = snapAnimationSpec,
+                settleAnimationSpec = settleAnimationSpec,
+            ),
     ) {
         InterpolatedPlanetCardStack(
             motionStackProgressProvider = motionStackProgressProvider,
@@ -1247,6 +1209,266 @@ private fun ScrollableInterpolatedPlanetCardStack(
     }
 }
 
+private fun Modifier.planetCardStackDrag(
+    entranceStackProgressProvider: () -> Float,
+    planets: List<PlanetCardModel>,
+    maxStep: Int,
+    density: Density,
+    motionScope: CoroutineScope,
+    stepProgress: Animatable<Float, AnimationVector1D>,
+    cardSettlePhase: Animatable<Float, AnimationVector1D>,
+    settledStep: MutableIntState,
+    settleDirection: MutableFloatState,
+    snapAnimationSpec: AnimationSpec<Float>,
+    settleAnimationSpec: AnimationSpec<Float>,
+): Modifier = pointerInput(maxStep, density) {
+    val snapDistance = PlanetCardDimens.SnapDragDistance.toPx()
+    val distanceThreshold = PlanetCardDimens.SnapDistanceThreshold.toPx()
+    val velocityThreshold = PlanetCardDimens.SnapVelocityThreshold.toPx()
+
+    awaitEachGesture {
+        handleCardStackGesture(
+            entranceStackProgressProvider = entranceStackProgressProvider,
+            planets = planets,
+            maxStep = maxStep,
+            density = density,
+            motionScope = motionScope,
+            stepProgress = stepProgress,
+            cardSettlePhase = cardSettlePhase,
+            settledStep = settledStep,
+            settleDirection = settleDirection,
+            snapAnimationSpec = snapAnimationSpec,
+            settleAnimationSpec = settleAnimationSpec,
+            snapDistance = snapDistance,
+            distanceThreshold = distanceThreshold,
+            velocityThreshold = velocityThreshold,
+        )
+    }
+}
+
+private suspend fun AwaitPointerEventScope.handleCardStackGesture(
+    entranceStackProgressProvider: () -> Float,
+    planets: List<PlanetCardModel>,
+    maxStep: Int,
+    density: Density,
+    motionScope: CoroutineScope,
+    stepProgress: Animatable<Float, AnimationVector1D>,
+    cardSettlePhase: Animatable<Float, AnimationVector1D>,
+    settledStep: MutableIntState,
+    settleDirection: MutableFloatState,
+    snapAnimationSpec: AnimationSpec<Float>,
+    settleAnimationSpec: AnimationSpec<Float>,
+    snapDistance: Float,
+    distanceThreshold: Float,
+    velocityThreshold: Float,
+) {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    if (entranceStackProgressProvider() < 0.95f) return
+
+    val velocityTracker = VelocityTracker()
+    velocityTracker.addPosition(down.uptimeMillis, down.position)
+    val gestureStartStep = settledStep.intValue
+    val gestureStartProgress = stepProgress.value
+    val cardStackWidthPx = size.width.toFloat()
+    val hitCardBody = with(density) {
+        isCardBodyHit(
+            position = down.position,
+            cardWidthPx = cardStackWidthPx,
+            stackProgress = currentStackProgress(stepProgress.value, maxStep),
+            planets = planets,
+        )
+    }
+    val dragResult = trackCardDrag(
+        down = down,
+        velocityTracker = velocityTracker,
+        hitCardBody = hitCardBody,
+        gestureStartStep = gestureStartStep,
+        gestureStartProgress = gestureStartProgress,
+        maxStep = maxStep,
+        snapDistance = snapDistance,
+        motionScope = motionScope,
+        stepProgress = stepProgress,
+        settleDirection = settleDirection,
+    ) ?: return
+
+    val targetStep = targetCardStep(
+        gestureStartStep = gestureStartStep,
+        latestDraggedStep = dragResult.latestDraggedStep,
+        velocityY = dragResult.velocityY,
+        velocityThreshold = velocityThreshold,
+        distanceThreshold = distanceThreshold,
+        snapDistance = snapDistance,
+        maxStep = maxStep,
+    )
+    animateCardStackToStep(
+        targetStep = targetStep,
+        latestDraggedStep = dragResult.latestDraggedStep,
+        motionScope = motionScope,
+        stepProgress = stepProgress,
+        cardSettlePhase = cardSettlePhase,
+        settledStep = settledStep,
+        settleDirection = settleDirection,
+        snapAnimationSpec = snapAnimationSpec,
+        settleAnimationSpec = settleAnimationSpec,
+    )
+}
+
+private data class CardDragResult(
+    val latestDraggedStep: Float,
+    val velocityY: Float,
+)
+
+private suspend fun AwaitPointerEventScope.trackCardDrag(
+    down: PointerInputChange,
+    velocityTracker: VelocityTracker,
+    hitCardBody: Boolean,
+    gestureStartStep: Int,
+    gestureStartProgress: Float,
+    maxStep: Int,
+    snapDistance: Float,
+    motionScope: CoroutineScope,
+    stepProgress: Animatable<Float, AnimationVector1D>,
+    settleDirection: MutableFloatState,
+): CardDragResult? {
+    var totalDragY = 0f
+    var isDraggingCard = false
+    var dragSnapJob: Job? = null
+    var latestDraggedStep = gestureStartProgress
+
+    while (true) {
+        val event = awaitPointerEvent()
+        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+        if (!change.pressed) break
+
+        totalDragY += change.positionChange().y
+        velocityTracker.addPosition(change.uptimeMillis, change.position)
+        if (!isDraggingCard && abs(totalDragY) >= viewConfiguration.touchSlop) {
+            if (!canStartCardDrag(
+                    totalDragY = totalDragY,
+                    hitCardBody = hitCardBody,
+                    gestureStartStep = gestureStartStep,
+                    maxStep = maxStep,
+                )
+            ) {
+                change.consume()
+                break
+            }
+            isDraggingCard = true
+        }
+
+        if (isDraggingCard) {
+            change.consume()
+            settleDirection.floatValue = 0f
+            latestDraggedStep = draggedStep(
+                gestureStartProgress = gestureStartProgress,
+                totalDragY = totalDragY,
+                snapDistance = snapDistance,
+                maxStep = maxStep,
+            )
+            dragSnapJob?.cancel()
+            dragSnapJob = motionScope.launch {
+                stepProgress.snapTo(latestDraggedStep)
+            }
+        }
+    }
+
+    dragSnapJob?.cancel()
+    return if (isDraggingCard) {
+        CardDragResult(
+            latestDraggedStep = latestDraggedStep,
+            velocityY = velocityTracker.calculateVelocity().y,
+        )
+    } else {
+        null
+    }
+}
+
+private fun canStartCardDrag(
+    totalDragY: Float,
+    hitCardBody: Boolean,
+    gestureStartStep: Int,
+    maxStep: Int,
+): Boolean {
+    val direction = dragStepDirection(totalDragY)
+    return hitCardBody && (gestureStartStep + direction).coerceIn(0, maxStep) != gestureStartStep
+}
+
+private fun draggedStep(
+    gestureStartProgress: Float,
+    totalDragY: Float,
+    snapDistance: Float,
+    maxStep: Int,
+): Float = (gestureStartProgress - totalDragY / snapDistance).coerceIn(0f, maxStep.toFloat())
+
+private fun targetCardStep(
+    gestureStartStep: Int,
+    latestDraggedStep: Float,
+    velocityY: Float,
+    velocityThreshold: Float,
+    distanceThreshold: Float,
+    snapDistance: Float,
+    maxStep: Int,
+): Int {
+    val distanceStep = latestDraggedStep - gestureStartStep.toFloat()
+    val velocityStep = when {
+        velocityY <= -velocityThreshold -> 1
+        velocityY >= velocityThreshold -> -1
+        else -> 0
+    }
+    val thresholdStep = when {
+        distanceStep >= distanceThreshold / snapDistance -> 1
+        distanceStep <= -distanceThreshold / snapDistance -> -1
+        else -> 0
+    }
+    return (gestureStartStep + if (velocityStep != 0) velocityStep else thresholdStep)
+        .coerceIn(0, maxStep)
+}
+
+private fun animateCardStackToStep(
+    targetStep: Int,
+    latestDraggedStep: Float,
+    motionScope: CoroutineScope,
+    stepProgress: Animatable<Float, AnimationVector1D>,
+    cardSettlePhase: Animatable<Float, AnimationVector1D>,
+    settledStep: MutableIntState,
+    settleDirection: MutableFloatState,
+    snapAnimationSpec: AnimationSpec<Float>,
+    settleAnimationSpec: AnimationSpec<Float>,
+) {
+    settledStep.intValue = targetStep
+    val targetStepFloat = targetStep.toFloat()
+    settleDirection.floatValue = when {
+        targetStepFloat > latestDraggedStep -> -1f
+        targetStepFloat < latestDraggedStep -> 1f
+        else -> 0f
+    }
+    motionScope.launch {
+        stepProgress.snapTo(latestDraggedStep)
+        cardSettlePhase.snapTo(0f)
+        launch {
+            stepProgress.animateTo(
+                targetValue = targetStepFloat,
+                animationSpec = snapAnimationSpec,
+            )
+        }
+        launch {
+            cardSettlePhase.animateTo(
+                targetValue = 1f,
+                animationSpec = settleAnimationSpec,
+            )
+        }
+    }
+}
+
+private fun dragStepDirection(totalDragY: Float) = when {
+    totalDragY < 0f -> 1
+    totalDragY > 0f -> -1
+    else -> 0
+}
+
+private fun currentStackProgress(stepProgress: Float, maxStep: Int): Float =
+    1f - (stepProgress / maxStep.toFloat()).coerceIn(0f, 1f)
+
 @Composable
 private fun InterpolatedPlanetCardStack(
     motionStackProgressProvider: () -> Float,
@@ -1262,7 +1484,7 @@ private fun InterpolatedPlanetCardStack(
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .width(PlanetCardDimens.Width)
+            .fillMaxWidth()
             .height(PlanetCardDimens.StackContainerHeight),
     ) {
         planets.forEachIndexed { index, planet ->
@@ -1326,7 +1548,8 @@ private fun PlanetInfoCard(
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .size(PlanetCardDimens.Width, PlanetCardDimens.Height),
+            .fillMaxWidth()
+            .height(PlanetCardDimens.Height),
     ) {
         PlanetCardBackground(visualStateProvider = currentVisualState)
 
@@ -1448,8 +1671,8 @@ private fun PlanetCardHeader(
 @Composable
 private fun PlanetCardTitle(
     text: String,
-    alphaProvider: () -> Float = { 1f },
     modifier: Modifier = Modifier,
+    alphaProvider: () -> Float = { 1f },
 ) {
     FadingTextLayer(
         text = text,
@@ -1497,7 +1720,7 @@ private fun PlanetStatsGrid(
     Column(
         modifier = modifier
             .offset(x = PlanetCardDimens.StatsOffsetX, y = PlanetCardDimens.StatsOffsetY)
-            .width(PlanetCardDimens.Width),
+            .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(PlanetCardDimens.StatsRowGap),
     ) {
         PlanetStatsRow(
@@ -1526,13 +1749,11 @@ private fun PlanetStatsRow(
     ) {
         PlanetStatCell(
             stat = left,
-            textWidth = PlanetCardDimens.StatsLeftTextWidth,
             modifier = Modifier.weight(1f),
         )
         CardDividerVertical()
         PlanetStatCell(
             stat = right,
-            textWidth = PlanetCardDimens.StatsRightTextWidth,
             modifier = Modifier.weight(1f),
         )
     }
@@ -1542,7 +1763,6 @@ private fun PlanetStatsRow(
 private fun PlanetStatCell(
     stat: PlanetStat,
     modifier: Modifier = Modifier,
-    textWidth: Dp? = null,
 ) {
     Row(
         modifier = modifier,
@@ -1551,7 +1771,7 @@ private fun PlanetStatCell(
     ) {
         PlanetStatIcon(iconRes = stat.iconRes)
         Column(
-            modifier = if (textWidth != null) Modifier.width(textWidth) else Modifier,
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(PlanetCardDimens.LabelValueGap),
         ) {
             Text(text = stat.label, style = SolarTypography.StatLabel)
@@ -1605,25 +1825,26 @@ private fun CardDividerHorizontal() {
  * Animations / Motion Helpers
  */
 
-private val OvershootSpringSpec = spring<Float>(
+private val OvershootSpringSpec: AnimationSpec<Float> = spring(
     dampingRatio = 0.7f,
     stiffness = 25f,
     visibilityThreshold = 0.001f,
 )
 
 private val CardStackEasing = CubicBezierEasing(0.24f, 0.0f, 0.04f, 1.0f)
+private const val CardStackDelay = 0.04f
 
 private val StartGradientStops = listOf(
-    0f to Color(0x00000000),
-    0.24545f to Color(0xFF060816),
-    0.43331f to Color(0xFF0F172A),
-    1f to Color(0xFF020D3C),
+    0f to SolarColors.BackgroundGradient.Transparent,
+    0.24545f to SolarColors.BackgroundGradient.StartDeepSpace,
+    0.43331f to SolarColors.BackgroundGradient.StartMidnight,
+    1f to SolarColors.BackgroundGradient.StartBlue,
 )
 
 private val EndGradientStops = listOf(
-    0f to Color(0xFF1E1B4B),
-    0.5f to Color(0xFF0F172A),
-    1f to Color(0xFF030712),
+    0f to SolarColors.BackgroundGradient.EndViolet,
+    0.5f to SolarColors.BackgroundGradient.EndMidnight,
+    1f to SolarColors.BackgroundGradient.EndBlack,
 )
 
 private val SwipeHintArrowLayers = listOf(
@@ -1634,7 +1855,7 @@ private val SwipeHintArrowLayers = listOf(
 
 private fun solarMotionProgress(rawProgress: Float): SolarMotionProgress {
     val clamped = rawProgress.coerceIn(0f, 1f)
-    val cardStackProgress = eased(CardStackEasing, delayed(clamped, 0.04f))
+    val cardStackProgress = CardStackEasing.transform(delayedCardStackProgress(clamped))
 
     return SolarMotionProgress(
         earthXProgress = rawProgress,
@@ -1643,7 +1864,7 @@ private fun solarMotionProgress(rawProgress: Float): SolarMotionProgress {
         earthOpacityProgress = rawProgress,
         cardPositionProgress = rawProgress,
         cardStackProgress = cardStackProgress,
-        cardsScreenTop = lerp(
+        cardsScreenTop = interpolate(
             ScreenDimens.CardsStartTop,
             ScreenDimens.CardsEndTop,
             rawProgress,
@@ -1666,7 +1887,7 @@ private fun interpolatePlanetStackOffsetY(index: Int, progress: Float): Dp {
     val segment = scaled - fromIndex
     val start = StackKeyframes[fromIndex].layerAt(index)
     val end = StackKeyframes[fromIndex + 1].layerAt(index)
-    return lerp(start.offsetY, end.offsetY, segment)
+    return interpolate(start.offsetY, end.offsetY, segment)
 }
 
 private fun interpolatePlanetCardVisualState(index: Int, progress: Float): PlanetCardVisualState {
@@ -1680,13 +1901,13 @@ private fun interpolatePlanetCardVisualState(index: Int, progress: Float): Plane
     val start = StackKeyframes[fromIndex].layerAt(index).style
     val end = StackKeyframes[fromIndex + 1].layerAt(index).style
     return PlanetCardVisualState(
-        backgroundColor = lerpColor(start.backgroundColor, end.backgroundColor, segment),
-        planetAlpha = lerp(start.planetAlpha, end.planetAlpha, segment),
-        planetOffsetY = lerp(start.planetOffsetY, end.planetOffsetY, segment),
-        titleAlpha = lerp(start.titleAlpha(), end.titleAlpha(), segment),
-        taglineAlpha = lerp(start.taglineAlpha(), end.taglineAlpha(), segment),
-        statsAlpha = lerp(start.statsAlpha(), end.statsAlpha(), segment),
-        elevatedTitleAlpha = lerp(start.elevatedTitleAlpha(), end.elevatedTitleAlpha(), segment),
+        backgroundColor = interpolateColor(start.backgroundColor, end.backgroundColor, segment),
+        planetAlpha = interpolate(start.planetAlpha, end.planetAlpha, segment),
+        planetOffsetY = interpolate(start.planetOffsetY, end.planetOffsetY, segment),
+        titleAlpha = interpolate(start.titleAlpha(), end.titleAlpha(), segment),
+        taglineAlpha = interpolate(start.taglineAlpha(), end.taglineAlpha(), segment),
+        statsAlpha = interpolate(start.statsAlpha(), end.statsAlpha(), segment),
+        elevatedTitleAlpha = interpolate(start.elevatedTitleAlpha(), end.elevatedTitleAlpha(), segment),
     )
 }
 
@@ -1849,11 +2070,11 @@ private fun PlanetCardLayerStyle.elevatedTitleAlpha() =
 
 private fun Density.isCardBodyHit(
     position: Offset,
+    cardWidthPx: Float,
     stackProgress: Float,
     planets: List<PlanetCardModel>,
 ): Boolean {
-    val cardWidth = PlanetCardDimens.Width.toPx()
-    if (position.x !in 0f..cardWidth) return false
+    if (position.x !in 0f..cardWidthPx) return false
 
     val topPadding = PlanetCardDimens.StackTopPadding.toPx()
     val cardHeight = PlanetCardDimens.Height.toPx()
@@ -1981,7 +2202,7 @@ private fun DrawScope.drawEarthShadow(
     val discRadius = discDiameterPx / 2f
     val offsetY = EarthShadowOffsetY.toPx()
     val shadowCenter = Offset(center.x, center.y + offsetY)
-    val shadowArgb = EarthShadowColor.copy(alpha = shadowAlpha).toArgb()
+    val shadowArgb = SolarColors.EarthShadow.copy(alpha = shadowAlpha).toArgb()
 
     drawIntoCanvas { canvas ->
         val paint = android.graphics.Paint().apply {
@@ -2073,25 +2294,22 @@ private fun TextStyle.asStatSpanStyle() = SpanStyle(
     letterSpacing = letterSpacing,
 )
 
-private fun eased(easing: Easing, fraction: Float): Float =
-    easing.transform(fraction.coerceIn(0f, 1f))
+private fun delayedCardStackProgress(fraction: Float): Float =
+    ((fraction - CardStackDelay) / (1f - CardStackDelay)).coerceIn(0f, 1f)
 
-private fun delayed(fraction: Float, delay: Float): Float =
-    ((fraction - delay) / (1f - delay)).coerceIn(0f, 1f)
-
-private fun lerp(start: Float, end: Float, fraction: Float): Float =
+private fun interpolate(start: Float, end: Float, fraction: Float): Float =
     start + (end - start) * fraction
 
-private fun lerp(start: Dp, end: Dp, fraction: Float): Dp =
+private fun interpolate(start: Dp, end: Dp, fraction: Float): Dp =
     start + (end - start) * fraction
 
-private fun lerpColor(start: Color, end: Color, fraction: Float): Color {
+private fun interpolateColor(start: Color, end: Color, fraction: Float): Color {
     val f = fraction.coerceIn(0f, 1f)
     return Color(
-        alpha = lerp(start.alpha, end.alpha, f),
-        red = lerp(start.red, end.red, f),
-        green = lerp(start.green, end.green, f),
-        blue = lerp(start.blue, end.blue, f),
+        alpha = interpolate(start.alpha, end.alpha, f),
+        red = interpolate(start.red, end.red, f),
+        green = interpolate(start.green, end.green, f),
+        blue = interpolate(start.blue, end.blue, f),
     )
 }
 
