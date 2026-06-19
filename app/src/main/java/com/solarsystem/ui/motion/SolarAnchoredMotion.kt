@@ -2,8 +2,7 @@ package com.solarsystem.ui.motion
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.TweenSpec
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.unit.Dp
 import com.solarsystem.ui.tokens.ScreenDimens
 
@@ -24,45 +23,30 @@ enum class SolarMotionAnchor {
     Collapsed,
 }
 
-val SolarExploreTween: TweenSpec<Float> = tween(
-    durationMillis = 2400,
-    easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f),
+val OvershootSpringSpec = spring<Float>(
+    dampingRatio = 0.7f,
+    stiffness = 25f,
 )
 
-val SolarReturnTween: TweenSpec<Float> = tween(
-    durationMillis = 1200,
-    easing = CubicBezierEasing(0.16f, 0.0f, 0.08f, 1.0f),
-)
-
-private val EarthXEasing = CubicBezierEasing(0.18f, 0.0f, 0.12f, 1.0f)
-private val EarthYEasing = CubicBezierEasing(0.12f, 0.0f, 0.0f, 1.0f)
-private val EarthScaleEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
-private val OpacityEasing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
-private val CardPositionEasing = CubicBezierEasing(0.18f, 0.0f, 0.0f, 1.0f)
 private val CardStackEasing = CubicBezierEasing(0.24f, 0.0f, 0.04f, 1.0f)
 
 fun solarMotionProgress(rawProgress: Float): SolarMotionProgress {
     val clamped = rawProgress.coerceIn(0f, 1f)
-
-    val earthXProgress = eased(EarthXEasing, clamped)
-    val earthYProgress = eased(EarthYEasing, clamped)
-    val earthScaleProgress = eased(EarthScaleEasing, clamped)
-    val cardPositionProgress = eased(CardPositionEasing, delayed(clamped, 0.06f))
     val cardStackProgress = eased(CardStackEasing, delayed(clamped, 0.04f))
 
     return SolarMotionProgress(
         rawProgress = rawProgress,
         boundedProgress = clamped,
-        earthXProgress = earthXProgress,
-        earthYProgress = earthYProgress,
-        earthScaleProgress = earthScaleProgress,
-        earthOpacityProgress = eased(OpacityEasing, clamped),
-        cardPositionProgress = cardPositionProgress,
+        earthXProgress = rawProgress,
+        earthYProgress = rawProgress,
+        earthScaleProgress = rawProgress,
+        earthOpacityProgress = rawProgress,
+        cardPositionProgress = rawProgress,
         cardStackProgress = cardStackProgress,
         cardsScreenTop = lerp(
             ScreenDimens.CardsStartTop,
             ScreenDimens.CardsEndTop,
-            cardPositionProgress,
+            rawProgress,
         ),
     )
 }

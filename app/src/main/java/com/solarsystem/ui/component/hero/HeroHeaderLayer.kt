@@ -35,12 +35,11 @@ fun HeroHeaderLayer(
                 .width(ScreenDimens.HeroHeaderWidth)
                 .align(Alignment.TopCenter)
                 .graphicsLayer {
-                    val fraction = progressProvider().coerceIn(0f, 1f)
                     translationY = with(density) {
                         lerp(
                             ScreenDimens.EarthHeroHeaderTop,
                             ScreenDimens.EarthHeroHeaderEndTop,
-                            fraction,
+                            progressProvider(),
                         ).toPx()
                     }
                 },
@@ -54,12 +53,11 @@ fun HeroHeaderLayer(
                 .width(ScreenDimens.HeroHeaderWidth)
                 .align(Alignment.TopCenter)
                 .graphicsLayer {
-                    val fraction = progressProvider().coerceIn(0f, 1f)
                     translationY = with(density) {
                         lerp(
                             ScreenDimens.SolarHeroHeaderStartTop,
                             ScreenDimens.SolarHeroHeaderEndTop,
-                            fraction,
+                            progressProvider(),
                         ).toPx()
                     }
                 },

@@ -29,9 +29,8 @@ import com.solarsystem.ui.component.earth.AnimatedEarthLayer
 import com.solarsystem.ui.component.hero.HeroHeaderLayer
 import com.solarsystem.ui.component.hero.SwipeHintFooter
 import com.solarsystem.ui.component.planet.ScrollableInterpolatedPlanetCardStack
-import com.solarsystem.ui.motion.SolarExploreTween
+import com.solarsystem.ui.motion.OvershootSpringSpec
 import com.solarsystem.ui.motion.SolarMotionAnchor
-import com.solarsystem.ui.motion.SolarReturnTween
 import com.solarsystem.ui.motion.progressValue
 import com.solarsystem.ui.motion.solarMotionProgress
 import com.solarsystem.ui.theme.SolarSystemTheme
@@ -50,7 +49,7 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
             scope.launch {
                 anchoredProgress.animateTo(
                     targetValue = SolarMotionAnchor.Expanded.progressValue(),
-                    animationSpec = SolarReturnTween,
+                    animationSpec = OvershootSpringSpec,
                 )
             }
             Unit
@@ -87,10 +86,9 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
                                 } else {
                                     SolarMotionAnchor.Expanded
                                 }
-                                val spec = if (isExpanded) SolarExploreTween else SolarReturnTween
                                 anchoredProgress.animateTo(
                                     targetValue = target.progressValue(),
-                                    animationSpec = spec,
+                                    animationSpec = OvershootSpringSpec,
                                 )
                             }
                         }

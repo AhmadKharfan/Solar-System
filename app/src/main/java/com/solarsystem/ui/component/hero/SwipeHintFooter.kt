@@ -30,9 +30,8 @@ fun SwipeHintFooter(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer {
-                val fraction = progressProvider().coerceIn(0f, 1f)
                 translationY = with(density) {
-                    (ScreenDimens.SwipeHintEndTranslationY * fraction).toPx()
+                    (ScreenDimens.SwipeHintEndTranslationY * progressProvider()).toPx()
                 }
             }
             .padding(
