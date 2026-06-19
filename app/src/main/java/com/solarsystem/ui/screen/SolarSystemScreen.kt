@@ -19,10 +19,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.solarsystem.ui.component.background.AtmosphereBackdropLayer
 import com.solarsystem.ui.component.background.ScreenBackground
 import com.solarsystem.ui.component.earth.AnimatedEarthLayer
@@ -35,6 +38,7 @@ import com.solarsystem.ui.motion.progressValue
 import com.solarsystem.ui.motion.solarMotionProgress
 import com.solarsystem.ui.theme.SolarSystemTheme
 import com.solarsystem.ui.tokens.ScreenDimens
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -46,12 +50,6 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
     var cardsAtFirstStep by remember { mutableStateOf(true) }
     val screenExitFromCards = remember {
         {
-            scope.launch {
-                anchoredProgress.animateTo(
-                    targetValue = SolarMotionAnchor.Expanded.progressValue(),
-                    animationSpec = OvershootSpringSpec,
-                )
-            }
             Unit
         }
     }
@@ -60,37 +58,76 @@ fun SolarSystemScreen(modifier: Modifier = Modifier) {
             .fillMaxSize()
             .graphicsLayer { clip = false }
             .pointerInput(cardsAtFirstStep, density) {
+                val dragRangePx = with(density) { ScreenDimens.HeroScrollRange.toPx() }
+                    .coerceAtLeast(1f)
+                val swipeVelocityThresholdPx = with(density) { EarthSwipeVelocityThreshold.toPx() }
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val touchSlop = viewConfiguration.touchSlop
                     val cardSectionTopPx = with(density) { ScreenDimens.CardsSectionEndTop.toPx() }
                     val startedInCardSection = down.position.y >= cardSectionTopPx
+                    val velocityTracker = VelocityTracker()
+                    velocityTracker.addPosition(down.uptimeMillis, down.position)
+                    val gestureStartProgress = anchoredProgress.value.coerceIn(0f, 1f)
+                    var latestProgress = gestureStartProgress
                     var totalDragY = 0f
-                    var transitionStarted = false
+                    var draggingScreenMotion = false
+                    var progressSnapJob: Job? = null
 
                     while (true) {
-                        val event = awaitPointerEvent()
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) break
 
                         totalDragY += change.positionChange().y
-                        if (!transitionStarted && abs(totalDragY) >= touchSlop) {
-                            val isExpanded = anchoredProgress.value < 0.5f
-                            val canToggleFromCollapsed = !startedInCardSection
-                            if (!isExpanded && !canToggleFromCollapsed) continue
-
-                            transitionStarted = true
-                            scope.launch {
-                                val target = if (isExpanded) {
-                                    SolarMotionAnchor.Collapsed
-                                } else {
-                                    SolarMotionAnchor.Expanded
-                                }
-                                anchoredProgress.animateTo(
-                                    targetValue = target.progressValue(),
-                                    animationSpec = OvershootSpringSpec,
-                                )
+                        velocityTracker.addPosition(change.uptimeMillis, change.position)
+                        if (!draggingScreenMotion && abs(totalDragY) >= touchSlop) {
+                            val isDraggingTowardCards = totalDragY < 0f
+                            val isDraggingTowardHero = totalDragY > 0f
+                            val canMoveProgress = when {
+                                isDraggingTowardCards -> gestureStartProgress < 1f
+                                isDraggingTowardHero -> gestureStartProgress > 0f
+                                else -> false
                             }
+                            val startedInSettledCards = startedInCardSection && gestureStartProgress >= 0.95f
+                            val canDriveScreenMotion = if (startedInSettledCards) {
+                                cardsAtFirstStep && isDraggingTowardHero
+                            } else {
+                                canMoveProgress
+                            }
+
+                            if (!canDriveScreenMotion) continue
+
+                            draggingScreenMotion = true
+                            progressSnapJob?.cancel()
+                        }
+
+                        if (draggingScreenMotion) {
+                            change.consume()
+                            latestProgress = (gestureStartProgress - totalDragY / dragRangePx)
+                                .coerceIn(0f, 1f)
+                            progressSnapJob?.cancel()
+                            progressSnapJob = scope.launch {
+                                anchoredProgress.snapTo(latestProgress)
+                            }
+                        }
+                    }
+
+                    if (draggingScreenMotion) {
+                        progressSnapJob?.cancel()
+                        val velocityY = velocityTracker.calculateVelocity().y
+                        val target = when {
+                            velocityY <= -swipeVelocityThresholdPx -> SolarMotionAnchor.Collapsed
+                            velocityY >= swipeVelocityThresholdPx -> SolarMotionAnchor.Expanded
+                            latestProgress >= 0.5f -> SolarMotionAnchor.Collapsed
+                            else -> SolarMotionAnchor.Expanded
+                        }
+                        scope.launch {
+                            anchoredProgress.snapTo(latestProgress)
+                            anchoredProgress.animateTo(
+                                targetValue = target.progressValue(),
+                                animationSpec = OvershootSpringSpec,
+                            )
                         }
                     }
                 }
@@ -194,3 +231,5 @@ private fun SolarSystemScreenWidePreview() {
         SolarSystemScreen()
     }
 }
+
+private val EarthSwipeVelocityThreshold = 850.dp
