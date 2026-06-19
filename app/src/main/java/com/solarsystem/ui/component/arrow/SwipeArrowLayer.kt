@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import com.solarsystem.ui.modifier.arrowDropShadow
 import com.solarsystem.ui.theme.SolarColors
 import com.solarsystem.ui.tokens.ArrowDimens
@@ -24,17 +25,19 @@ import com.solarsystem.ui.tokens.ArrowDimens
 internal fun SwipeArrowLayer(
     @DrawableRes res: Int,
     modifier: Modifier = Modifier,
+    glowColor: Color = SolarColors.ArrowBlueGlow,
+    arrowSize: Dp = ArrowDimens.SwipeArrowSize,
 ) {
     val usesBlurShadow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
-            .size(ArrowDimens.SwipeArrowSize)
+            .size(arrowSize)
             .then(
                 if (usesBlurShadow) {
                     Modifier
                 } else {
-                    Modifier.arrowDropShadow(SolarColors.ArrowBlueGlow)
+                    Modifier.arrowDropShadow(glowColor)
                 },
             ),
     ) {
@@ -42,12 +45,12 @@ internal fun SwipeArrowLayer(
             Image(
                 painter = painterResource(res),
                 contentDescription = null,
-                colorFilter = ColorFilter.tint(Color(0xFF4197E7)),
+                colorFilter = ColorFilter.tint(glowColor.copy(alpha = 1f)),
                 modifier = Modifier
                     .fillMaxSize()
                     .offset(y = ArrowDimens.SwipeShadowOffsetY)
                     .blur(ArrowDimens.SwipeShadowBlur)
-                    .alpha(0.32f),
+                    .alpha(glowColor.alpha),
                 contentScale = ContentScale.Fit,
             )
         }

@@ -14,6 +14,7 @@ object SolarColors {
     val TextShadow = Color(0x29FFFFFF)
 
     val ArrowBlueGlow = Color(0x524197E7)
+    val SwipeHintArrowGlow = Color(0x70FFFFFF)
 
     object PlanetGlow {
         val Saturn = Color(0x80AB4F20)

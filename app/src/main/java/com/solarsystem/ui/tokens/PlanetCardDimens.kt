@@ -23,8 +23,8 @@ object PlanetCardDimens {
 
     val HeaderX = 137.dp
     val HeaderWidth = 178.dp
-    val TitleY = 13.dp
-    val SubtitleY = 40.dp
+    val TitleY = 13.5.dp
+    val SubtitleY = 40.5.dp
 
     val StatsOffsetX = (-0.5).dp
     val StatsOffsetY = 111.5.dp
@@ -32,7 +32,7 @@ object PlanetCardDimens {
     val StatsRowPaddingX = 16.dp
     val StatsColumnGap = 16.dp
     val StatsLeftTextWidth = 103.dp
-    val StatsRightTextWidth = 96.dp
+    val StatsRightTextWidth = 76.dp
     val IconSize = 20.dp
     val IconTextGap = 8.dp
     val LabelValueGap = 4.dp

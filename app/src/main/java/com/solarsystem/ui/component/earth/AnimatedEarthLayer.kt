@@ -100,7 +100,7 @@ fun AnimatedEarthLayer(
                 },
         ) {
             Image(
-                painter = painterResource(R.drawable.earth),
+                painter = painterResource(R.drawable.img_earth),
                 contentDescription = "Earth",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

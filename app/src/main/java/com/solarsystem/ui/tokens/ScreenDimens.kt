@@ -8,6 +8,8 @@ object ScreenDimens {
     val BackgroundImageSize = 800.dp
     val BackgroundImageLeft = (-150).dp
     val BackgroundImageTop = 0.dp
+    val BackgroundImageViewportCenterX = 250.dp
+    val BackgroundImageViewportCenterY = BackgroundImageTop + BackgroundImageSize / 2
     val HeroScrollRange = 770.dp
     val CardsSectionStartTop = 1100.dp
     val CardsSectionEndTop = 330.dp

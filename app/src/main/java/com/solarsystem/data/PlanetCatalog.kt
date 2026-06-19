@@ -10,7 +10,7 @@ object PlanetCatalog {
     val saturn = PlanetCardModel(
         name = "Saturn",
         tagline = "The Ring Master",
-        imageRes = R.drawable.planet_saturn,
+        imageRes = R.drawable.img_saturn,
         imageHeight = PlanetCardDimens.PlanetHeightSaturn,
         glowColor = SolarColors.PlanetGlow.Saturn,
         stats = listOf(
@@ -26,7 +26,7 @@ object PlanetCatalog {
         PlanetCardModel(
             name = "Mars",
             tagline = "The next colony",
-            imageRes = R.drawable.planet_mars,
+            imageRes = R.drawable.img_mars,
             glowColor = SolarColors.PlanetGlow.Mars,
             stats = listOf(
                 PlanetStat(R.drawable.ic_weight_scale, "You Would Weigh", "70kg → 27kg"),
@@ -38,7 +38,7 @@ object PlanetCatalog {
         PlanetCardModel(
             name = "Mercury",
             tagline = "The Fastest Planet",
-            imageRes = R.drawable.planet_mercury,
+            imageRes = R.drawable.img_mercury,
             glowColor = SolarColors.PlanetGlow.Mercury,
             stats = listOf(
                 PlanetStat(R.drawable.ic_weight_scale, "You Would Weigh", "70kg → 26kg"),
@@ -50,7 +50,7 @@ object PlanetCatalog {
         PlanetCardModel(
             name = "Venus",
             tagline = "The Toxic Beauty",
-            imageRes = R.drawable.planet_venus,
+            imageRes = R.drawable.img_venus,
             glowColor = SolarColors.PlanetGlow.Venus,
             stats = listOf(
                 PlanetStat(R.drawable.ic_weight_scale, "You Would Weigh", "70kg → 63kg"),
@@ -62,7 +62,7 @@ object PlanetCatalog {
         PlanetCardModel(
             name = "Jupiter",
             tagline = "The Heavy Giant",
-            imageRes = R.drawable.planet_jupiter,
+            imageRes = R.drawable.img_jupiter,
             glowColor = SolarColors.PlanetGlow.Jupiter,
             stats = listOf(
                 PlanetStat(R.drawable.ic_weight_scale, "You Would Weigh", "70kg → 177kg"),
@@ -74,7 +74,7 @@ object PlanetCatalog {
         PlanetCardModel(
             name = "Uranus",
             tagline = "The Lazy Iceberg",
-            imageRes = R.drawable.planet_uranus,
+            imageRes = R.drawable.img_uranus,
             glowColor = SolarColors.PlanetGlow.Uranus,
             stats = listOf(
                 PlanetStat(R.drawable.ic_weight_scale, "You Would Weigh", "70kg → 62kg"),
@@ -86,7 +86,7 @@ object PlanetCatalog {
         PlanetCardModel(
             name = "Neptune",
             tagline = "The Windy World",
-            imageRes = R.drawable.planet_neptune,
+            imageRes = R.drawable.img_neptune,
             glowColor = SolarColors.PlanetGlow.Neptune,
             stats = listOf(
                 PlanetStat(R.drawable.ic_weight_scale, "You Would Weigh", "70kg → 79kg"),
