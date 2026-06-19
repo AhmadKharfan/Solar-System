@@ -25,8 +25,8 @@ enum class SolarMotionAnchor {
 }
 
 val SolarExploreTween: TweenSpec<Float> = tween(
-    durationMillis = 1200,
-    easing = CubicBezierEasing(0.16f, 0.0f, 0.08f, 1.0f),
+    durationMillis = 2400,
+    easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f),
 )
 
 val SolarReturnTween: TweenSpec<Float> = tween(
