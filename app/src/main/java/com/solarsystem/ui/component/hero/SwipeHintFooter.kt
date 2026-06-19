@@ -21,19 +21,20 @@ import com.solarsystem.ui.tokens.ScreenDimens
 
 @Composable
 fun SwipeHintFooter(
-    progress: Float,
+    progressProvider: () -> Float,
     modifier: Modifier = Modifier,
 ) {
-    val fraction = progress.coerceIn(0f, 1f)
     val density = LocalDensity.current
-    val translationY = with(density) {
-        (ScreenDimens.SwipeHintEndTranslationY * fraction).toPx()
-    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { this.translationY = translationY }
+            .graphicsLayer {
+                val fraction = progressProvider().coerceIn(0f, 1f)
+                translationY = with(density) {
+                    (ScreenDimens.SwipeHintEndTranslationY * fraction).toPx()
+                }
+            }
             .padding(
                 horizontal = ScreenDimens.SwipeHintHorizontalPadding,
                 vertical = ScreenDimens.SwipeHintBottomPadding,

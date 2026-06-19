@@ -15,23 +15,15 @@ import com.solarsystem.R
 import com.solarsystem.ui.modifier.EarthShadowBleed
 import com.solarsystem.ui.modifier.earthFigmaDropShadow
 import com.solarsystem.ui.modifier.earthPlacement
-import com.solarsystem.ui.motion.SolarMotionProgress
 import com.solarsystem.ui.motion.lerp
+import com.solarsystem.ui.motion.solarMotionProgress
 import com.solarsystem.ui.tokens.ScreenDimens
 
 @Composable
 fun AnimatedEarthLayer(
-    motion: SolarMotionProgress,
+    progressProvider: () -> Float,
     modifier: Modifier = Modifier,
 ) {
-    val alpha = lerp(
-        ScreenDimens.EarthStartAlpha,
-        ScreenDimens.EarthEndAlpha,
-        motion.earthOpacityProgress,
-    )
-    val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
-    val visualSize = ScreenDimens.EarthBaseSize * scale
-
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -40,26 +32,35 @@ fun AnimatedEarthLayer(
         val startLeft = maxWidth / 2 - 8.dp - ScreenDimens.EarthBaseSize / 2
         val startTop = maxHeight + ScreenDimens.EarthStartBottomOverflow - ScreenDimens.EarthBaseSize
 
-        val left = lerp(startLeft, ScreenDimens.EarthEndLeft, motion.earthXProgress)
-        val top = lerp(startTop, ScreenDimens.EarthEndTop, motion.earthYProgress)
-        val translationX = left - startLeft
-        val translationY = top - startTop
-
         val bleed = EarthShadowBleed
 
         Box(
             modifier = Modifier
                 .earthPlacement(
-                    left = left - bleed,
-                    top = top - bleed,
-                    width = visualSize + bleed * 2,
-                    height = visualSize + bleed * 2,
+                    left = startLeft - bleed,
+                    top = startTop - bleed,
+                    width = ScreenDimens.EarthBaseSize + bleed * 2,
+                    height = ScreenDimens.EarthBaseSize + bleed * 2,
                 )
                 .graphicsLayer {
                     clip = false
+                    val motion = solarMotionProgress(progressProvider())
+                    val alpha = lerp(
+                        ScreenDimens.EarthStartAlpha,
+                        ScreenDimens.EarthEndAlpha,
+                        motion.earthOpacityProgress,
+                    )
+                    val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
+                    val left = lerp(startLeft, ScreenDimens.EarthEndLeft, motion.earthXProgress)
+                    val top = lerp(startTop, ScreenDimens.EarthEndTop, motion.earthYProgress)
+                    translationX = (left - startLeft + bleed * (1f - scale)).toPx()
+                    translationY = (top - startTop + bleed * (1f - scale)).toPx()
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0f, 0f)
                     this.alpha = alpha
                 }
-                .earthFigmaDropShadow(discDiameter = visualSize),
+                .earthFigmaDropShadow(discDiameter = ScreenDimens.EarthBaseSize),
         )
 
         Box(
@@ -67,8 +68,17 @@ fun AnimatedEarthLayer(
                 .earthPlacement(startLeft, startTop, ScreenDimens.EarthBaseSize, ScreenDimens.EarthBaseSize)
                 .graphicsLayer {
                     clip = false
-                    this.translationX = translationX.toPx()
-                    this.translationY = translationY.toPx()
+                    val motion = solarMotionProgress(progressProvider())
+                    val alpha = lerp(
+                        ScreenDimens.EarthStartAlpha,
+                        ScreenDimens.EarthEndAlpha,
+                        motion.earthOpacityProgress,
+                    )
+                    val scale = lerp(1f, ScreenDimens.EarthEndScale, motion.earthScaleProgress)
+                    val left = lerp(startLeft, ScreenDimens.EarthEndLeft, motion.earthXProgress)
+                    val top = lerp(startTop, ScreenDimens.EarthEndTop, motion.earthYProgress)
+                    translationX = (left - startLeft).toPx()
+                    translationY = (top - startTop).toPx()
                     scaleX = scale
                     scaleY = scale
                     transformOrigin = TransformOrigin(0f, 0f)

@@ -16,15 +16,9 @@ import com.solarsystem.ui.tokens.ScreenDimens
 
 @Composable
 fun AtmosphereBackdropLayer(
-    progress: Float,
+    progressProvider: () -> Float,
     modifier: Modifier = Modifier,
 ) {
-    val alpha = lerp(
-        ScreenDimens.AtmosphereStartAlpha,
-        ScreenDimens.AtmosphereEndAlpha,
-        progress.coerceIn(0f, 1f),
-    )
-
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -43,6 +37,11 @@ fun AtmosphereBackdropLayer(
                 .size(ScreenDimens.BackgroundImageSize)
                 .graphicsLayer {
                     clip = false
+                    val alpha = lerp(
+                        ScreenDimens.AtmosphereStartAlpha,
+                        ScreenDimens.AtmosphereEndAlpha,
+                        progressProvider().coerceIn(0f, 1f),
+                    )
                     this.alpha = alpha
                 },
         )

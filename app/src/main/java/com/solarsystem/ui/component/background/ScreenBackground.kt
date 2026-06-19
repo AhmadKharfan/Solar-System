@@ -8,8 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import com.solarsystem.ui.motion.lerpColor
-import com.solarsystem.ui.motion.sampleGradientColor
+import androidx.compose.ui.graphics.graphicsLayer
 
 private val BaseSurface = Color(0xFF0D0608)
 
@@ -26,29 +25,13 @@ private val EndGradientStops = listOf(
     1f to Color(0xFF030712),
 )
 
-private val BlendedGradientPositions = floatArrayOf(
-    0f,
-    0.24545f,
-    0.43331f,
-    0.5f,
-    1f,
-)
-
 @Composable
 fun ScreenBackground(
-    progress: Float,
+    progressProvider: () -> Float,
     modifier: Modifier = Modifier,
 ) {
-    val blend = progress.coerceIn(0f, 1f)
-    val gradient = remember(blend) {
-        Brush.verticalGradient(
-            colorStops = BlendedGradientPositions.map { position ->
-                val startColor = sampleGradientColor(StartGradientStops, position)
-                val endColor = sampleGradientColor(EndGradientStops, position)
-                position to lerpColor(startColor, endColor, blend)
-            }.toTypedArray(),
-        )
-    }
+    val startGradient = remember { Brush.verticalGradient(colorStops = StartGradientStops.toTypedArray()) }
+    val endGradient = remember { Brush.verticalGradient(colorStops = EndGradientStops.toTypedArray()) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -59,7 +42,18 @@ fun ScreenBackground(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(gradient),
+                .graphicsLayer {
+                    alpha = 1f - progressProvider().coerceIn(0f, 1f)
+                }
+                .background(startGradient),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = progressProvider().coerceIn(0f, 1f)
+                }
+                .background(endGradient),
         )
     }
 }

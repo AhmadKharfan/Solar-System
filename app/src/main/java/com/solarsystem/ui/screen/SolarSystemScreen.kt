@@ -31,7 +31,6 @@ import com.solarsystem.ui.component.hero.SwipeHintFooter
 import com.solarsystem.ui.component.planet.ScrollableInterpolatedPlanetCardStack
 import com.solarsystem.ui.motion.SolarExploreTween
 import com.solarsystem.ui.motion.SolarMotionAnchor
-import com.solarsystem.ui.motion.SolarMotionProgress
 import com.solarsystem.ui.motion.SolarReturnTween
 import com.solarsystem.ui.motion.progressValue
 import com.solarsystem.ui.motion.solarMotionProgress
@@ -113,11 +112,9 @@ private fun BoxScope.SolarMotionScene(
     onCardsAtFirstStepChanged: (Boolean) -> Unit,
     onRequestScreenExitFromCards: () -> Unit,
 ) {
-    val motion = solarMotionProgress(progressProvider())
+    ScreenBackground(progressProvider = progressProvider)
 
-    ScreenBackground(progress = motion.boundedProgress)
-
-    AtmosphereBackdropLayer(progress = motion.boundedProgress)
+    AtmosphereBackdropLayer(progressProvider = progressProvider)
 
     Box(
         modifier = Modifier
@@ -128,7 +125,7 @@ private fun BoxScope.SolarMotionScene(
             .graphicsLayer { clip = false },
     ) {
         SolarSystemContent(
-            motion = motion,
+            progressProvider = progressProvider,
             onCardsAtFirstStepChanged = onCardsAtFirstStepChanged,
             onRequestScreenExitFromCards = onRequestScreenExitFromCards,
         )
@@ -137,32 +134,37 @@ private fun BoxScope.SolarMotionScene(
 
 @Composable
 private fun BoxScope.SolarSystemContent(
-    motion: SolarMotionProgress,
+    progressProvider: () -> Float,
     onCardsAtFirstStepChanged: (Boolean) -> Unit,
     onRequestScreenExitFromCards: () -> Unit,
 ) {
     val density = LocalDensity.current
-    val cardsScreenTopPx = with(density) { motion.cardsScreenTop.toPx() }
 
     AnimatedEarthLayer(
-        motion = motion,
+        progressProvider = progressProvider,
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer { clip = false },
     )
 
     HeroHeaderLayer(
-        progress = motion.cardPositionProgress,
+        progressProvider = {
+            solarMotionProgress(progressProvider()).cardPositionProgress
+        },
         modifier = Modifier.align(Alignment.TopCenter),
     )
 
     SwipeHintFooter(
-        progress = motion.cardPositionProgress,
+        progressProvider = {
+            solarMotionProgress(progressProvider()).cardPositionProgress
+        },
         modifier = Modifier.align(Alignment.BottomCenter),
     )
 
     ScrollableInterpolatedPlanetCardStack(
-        entranceStackProgress = motion.cardStackProgress,
+        entranceStackProgressProvider = {
+            solarMotionProgress(progressProvider()).cardStackProgress
+        },
         onFirstStepChanged = onCardsAtFirstStepChanged,
         onRequestScreenExit = onRequestScreenExitFromCards,
         modifier = Modifier
@@ -172,6 +174,8 @@ private fun BoxScope.SolarSystemContent(
             .padding(horizontal = ScreenDimens.CardsHorizontalPadding)
             .graphicsLayer {
                 clip = false
+                val motion = solarMotionProgress(progressProvider())
+                val cardsScreenTopPx = with(density) { motion.cardsScreenTop.toPx() }
                 translationY = cardsScreenTopPx
             },
     )

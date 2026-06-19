@@ -20,15 +20,10 @@ import com.solarsystem.ui.tokens.ScreenDimens
 
 @Composable
 fun HeroHeaderLayer(
-    progress: Float,
+    progressProvider: () -> Float,
     modifier: Modifier = Modifier,
 ) {
-    val fraction = progress.coerceIn(0f, 1f)
-    val earthTop = lerp(ScreenDimens.EarthHeroHeaderTop, ScreenDimens.EarthHeroHeaderEndTop, fraction)
-    val solarTop = lerp(ScreenDimens.SolarHeroHeaderStartTop, ScreenDimens.SolarHeroHeaderEndTop, fraction)
     val density = LocalDensity.current
-    val earthTopPx = with(density) { earthTop.toPx() }
-    val solarTopPx = with(density) { solarTop.toPx() }
 
     Box(modifier = modifier.fillMaxWidth()) {
         HeroHeaderBlock(
@@ -39,7 +34,16 @@ fun HeroHeaderLayer(
             modifier = Modifier
                 .width(ScreenDimens.HeroHeaderWidth)
                 .align(Alignment.TopCenter)
-                .graphicsLayer { translationY = earthTopPx },
+                .graphicsLayer {
+                    val fraction = progressProvider().coerceIn(0f, 1f)
+                    translationY = with(density) {
+                        lerp(
+                            ScreenDimens.EarthHeroHeaderTop,
+                            ScreenDimens.EarthHeroHeaderEndTop,
+                            fraction,
+                        ).toPx()
+                    }
+                },
         )
         HeroHeaderBlock(
             title = "Our Solar System",
@@ -49,7 +53,16 @@ fun HeroHeaderLayer(
             modifier = Modifier
                 .width(ScreenDimens.HeroHeaderWidth)
                 .align(Alignment.TopCenter)
-                .graphicsLayer { translationY = solarTopPx },
+                .graphicsLayer {
+                    val fraction = progressProvider().coerceIn(0f, 1f)
+                    translationY = with(density) {
+                        lerp(
+                            ScreenDimens.SolarHeroHeaderStartTop,
+                            ScreenDimens.SolarHeroHeaderEndTop,
+                            fraction,
+                        ).toPx()
+                    }
+                },
         )
     }
 }
