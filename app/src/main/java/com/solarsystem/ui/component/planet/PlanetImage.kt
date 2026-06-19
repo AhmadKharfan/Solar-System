@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -22,32 +21,30 @@ import com.solarsystem.ui.tokens.PlanetCardDimens
 internal fun PlanetImage(
     model: PlanetCardModel,
     modifier: Modifier = Modifier,
-    alpha: Float = 1f,
     alphaProvider: (() -> Float)? = null,
+    translationYProvider: (() -> Float)? = null,
 ) {
-    val glowExtent = PlanetCardDimens.PlanetShadowBlur
-
     Box(
         modifier = modifier
+            .size(PlanetCardDimens.PlanetWidth, model.imageHeight)
             .graphicsLayer {
                 clip = false
-                this.alpha = alphaProvider?.invoke() ?: alpha
+                translationYProvider?.let { translationY = it() }
             }
-            .size(
-                PlanetCardDimens.PlanetWidth + glowExtent * 2,
-                model.imageHeight + glowExtent * 2,
-            )
             .planetShadow(
                 glowColor = model.glowColor,
                 planetWidth = PlanetCardDimens.PlanetWidth,
                 planetHeight = model.imageHeight,
             ),
-        contentAlignment = Alignment.Center,
     ) {
         Image(
             painter = painterResource(model.imageRes),
             contentDescription = model.name,
             modifier = Modifier
+                .graphicsLayer {
+                    clip = false
+                    alpha = alphaProvider?.invoke() ?: 1f
+                }
                 .size(PlanetCardDimens.PlanetWidth, model.imageHeight),
             contentScale = ContentScale.Crop,
         )

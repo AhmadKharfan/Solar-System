@@ -15,6 +15,7 @@ object PlanetCardDimens {
     val PlanetHeightDefault = 112.dp
     val PlanetHeightSaturn = 104.dp
     val PlanetShadowBlur = 100.dp
+    val PlanetGlowBleed = PlanetShadowBlur
     val StackTopPadding = 112.dp
     val SnapDragDistance = 260.dp
     val SnapDistanceThreshold = 84.dp

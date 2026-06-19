@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.graphicsLayer
@@ -41,6 +42,7 @@ fun PlanetInfoCard(
 ) {
     val staticVisualState = remember(layerStyle) { layerStyle.toVisualState() }
     val currentVisualState = visualStateProvider ?: { staticVisualState }
+    val density = LocalDensity.current
 
     Box(
         modifier = modifier
@@ -52,18 +54,20 @@ fun PlanetInfoCard(
         PlanetImage(
             model = model,
             alphaProvider = { currentVisualState().planetAlpha },
+            translationYProvider = {
+                with(density) {
+                    (
+                        currentVisualState().planetOffsetY - PlanetCardDimens.PlanetOffsetY
+                    ).toPx()
+                }
+            },
             modifier = Modifier
                 .zIndex(1f)
                 .align(Alignment.TopStart)
                 .offset(
-                    x = PlanetCardDimens.PlanetOffsetX - PlanetCardDimens.PlanetShadowBlur,
-                    y = PlanetCardDimens.PlanetOffsetY - PlanetCardDimens.PlanetShadowBlur,
-                )
-                .graphicsLayer {
-                    translationY = (
-                        currentVisualState().planetOffsetY - PlanetCardDimens.PlanetOffsetY
-                    ).toPx()
-                },
+                    x = PlanetCardDimens.PlanetOffsetX,
+                    y = PlanetCardDimens.PlanetOffsetY,
+                ),
         )
 
         PlanetCardHeader(
