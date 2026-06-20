@@ -42,6 +42,7 @@ import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -99,6 +100,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -289,6 +291,7 @@ private val CardTitleY = 13.5.dp
 private val CardListGap = 32.dp
 private val TextLayerBleed = 14.dp
 private val EarthShadowBleed = 62.dp
+private const val VisibleStackSlots = 7
 private const val EarthShadowAlpha = 0.25f
 
 private const val PeekPlanetAlpha = 0.32f
@@ -1001,21 +1004,32 @@ private fun ScrollableInterpolatedPlanetCardStack(
     modifier: Modifier = Modifier,
     planets: List<PlanetCardModel> = PlanetCatalog.all,
 ) {
+    if (planets.isEmpty()) {
+        LaunchedEffect(onFirstStepChanged) {
+            onFirstStepChanged(true)
+        }
+        Box(modifier = modifier)
+        return
+    }
+
     val density = LocalDensity.current
     val motionScope = rememberCoroutineScope()
-    val maxStep = (planets.size - 1).coerceAtLeast(1)
+    val maxStep = (planets.size - 1).coerceAtLeast(0)
     val stepProgress = remember { Animatable(0f) }
     val cardSettlePhase = remember { Animatable(1f) }
     val settledStep = remember { mutableIntStateOf(0) }
     val settleDirection = remember { mutableFloatStateOf(0f) }
-    val styleStep by remember(maxStep) {
+    val activeStep by remember(maxStep) {
         derivedStateOf {
             stepProgress.value.roundToInt().coerceIn(0, maxStep)
         }
     }
-    val motionStackProgressProvider = remember(maxStep) {
-        {
-            currentStackProgress(stepProgress.value, maxStep)
+    val visibleCardRange by remember(maxStep) {
+        derivedStateOf {
+            visibleCardRange(
+                stepProgress = stepProgress.value,
+                lastIndex = planets.lastIndex,
+            )
         }
     }
     val snapAnimationSpec: AnimationSpec<Float> = remember {
@@ -1057,13 +1071,14 @@ private fun ScrollableInterpolatedPlanetCardStack(
             ),
     ) {
         InterpolatedPlanetCardStack(
-            motionStackProgressProvider = motionStackProgressProvider,
+            stepProgressProvider = { stepProgress.value },
             activeCardIndexProvider = {
-                stepProgress.value.roundToInt().coerceIn(0, planets.lastIndex)
+                activeStep.coerceIn(0, planets.lastIndex)
             },
             settlePhaseProvider = { cardSettlePhase.value },
             settleDirectionProvider = { settleDirection.floatValue },
-            styleStackProgress = 1f - (styleStep / maxStep.toFloat()).coerceIn(0f, 1f),
+            styleStackProgress = stackStyleProgress(activeStep),
+            visibleCardRange = visibleCardRange,
             planets = planets,
             modifier = Modifier
                 .padding(top = CardStackTopPadding)
@@ -1137,8 +1152,8 @@ private suspend fun AwaitPointerEventScope.handleCardStackGesture(
         isCardBodyHit(
             position = down.position,
             cardWidthPx = cardStackWidthPx,
-            stackProgress = currentStackProgress(stepProgress.value, maxStep),
-            planets = planets,
+            stepProgress = stepProgress.value,
+            lastIndex = planets.lastIndex,
         )
     }
     val dragResult = trackCardDrag(
@@ -1329,13 +1344,11 @@ private fun dragStepDirection(totalDragY: Float) = when {
     else -> 0
 }
 
-private fun currentStackProgress(stepProgress: Float, maxStep: Int): Float =
-    1f - (stepProgress / maxStep.toFloat()).coerceIn(0f, 1f)
-
 @Composable
 private fun InterpolatedPlanetCardStack(
-    motionStackProgressProvider: () -> Float,
+    stepProgressProvider: () -> Float,
     styleStackProgress: Float,
+    visibleCardRange: IntRange,
     modifier: Modifier = Modifier,
     planets: List<PlanetCardModel> = PlanetCatalog.all,
     activeCardIndexProvider: () -> Int = { 0 },
@@ -1348,51 +1361,56 @@ private fun InterpolatedPlanetCardStack(
         modifier = modifier
             .graphicsLayer { clip = false }
             .fillMaxWidth()
-            .height(CardHeight * 7 + CardListGap * 6),
+            .height(CardHeight * VisibleStackSlots + CardListGap * (VisibleStackSlots - 1)),
     ) {
-        planets.forEachIndexed { index, planet ->
-            val zIndex = stackZIndex(
-                index = index,
-                lastIndex = planets.lastIndex,
-                stackProgress = styleStackProgress,
-            )
-            PlanetInfoCard(
-                model = planet,
-                frameProvider = {
-                    interpolateCardFrame(
-                        index = index,
-                        progress = motionStackProgressProvider(),
-                    )
-                },
-                modifier = Modifier
-                    .zIndex(zIndex)
-                    .align(Alignment.TopStart)
-                    .graphicsLayer {
-                        clip = false
-                        val stackProgress = motionStackProgressProvider()
-                        val activeIndex = activeCardIndexProvider()
-                        val settleTranslationY = cardSettleTranslationY(
+        visibleCardRange.forEach { index ->
+            val planet = planets.getOrNull(index) ?: return@forEach
+            key(planet.name) {
+                val zIndex = stackZIndex(
+                    index = index,
+                    boostedIndex = visibleCardRange.last.coerceAtMost(planets.lastIndex),
+                    stackProgress = styleStackProgress,
+                )
+                PlanetInfoCard(
+                    model = planet,
+                    frameProvider = {
+                        interpolateCardFrame(
                             index = index,
-                            activeIndex = activeIndex,
-                            phase = settlePhaseProvider(),
-                            direction = settleDirectionProvider(),
+                            stepProgress = stepProgressProvider(),
+                            lastIndex = planets.lastIndex,
                         )
-                        val floatingScale = cardFloatingScale(
-                            index = index,
-                            activeIndex = activeIndex,
-                            stackProgress = stackProgress,
-                            cardCount = planets.size,
-                        )
-                        translationY = with(density) {
-                            interpolateCardFrame(
-                                index = index,
-                                progress = stackProgress,
-                            ).offsetY.toPx()
-                        } + with(density) { settleTranslationY.toPx() }
-                        scaleX = floatingScale
-                        scaleY = floatingScale
                     },
-            )
+                    modifier = Modifier
+                        .zIndex(zIndex)
+                        .align(Alignment.TopStart)
+                        .graphicsLayer {
+                            clip = false
+                            val stepProgress = stepProgressProvider()
+                            val activeIndex = activeCardIndexProvider()
+                            val settleTranslationY = cardSettleTranslationY(
+                                index = index,
+                                activeIndex = activeIndex,
+                                phase = settlePhaseProvider(),
+                                direction = settleDirectionProvider(),
+                            )
+                            val floatingScale = cardFloatingScale(
+                                index = index,
+                                activeIndex = activeIndex,
+                                stepProgress = stepProgress,
+                                cardCount = planets.size,
+                            )
+                            translationY = with(density) {
+                                interpolateCardFrame(
+                                    index = index,
+                                    stepProgress = stepProgress,
+                                    lastIndex = planets.lastIndex,
+                                ).offsetY.toPx()
+                            } + with(density) { settleTranslationY.toPx() }
+                            scaleX = floatingScale
+                            scaleY = floatingScale
+                        },
+                )
+            }
         }
     }
 }
@@ -1725,16 +1743,17 @@ private fun cardsScreenTop(progress: Float): Dp =
         progress,
     )
 
-private fun interpolateCardFrame(index: Int, progress: Float): CardFrame {
-    val clamped = progress.coerceIn(0f, 1f)
-    if (clamped <= 0f) return StackKeyframes.first().layerAt(index)
-    if (clamped >= 1f) return StackKeyframes.last().layerAt(index)
-
-    val scaled = clamped * StackKeyframes.lastIndex
-    val fromIndex = scaled.toInt().coerceIn(0, StackKeyframes.lastIndex - 1)
-    val segment = scaled - fromIndex
-    val start = StackKeyframes[fromIndex].layerAt(index)
-    val end = StackKeyframes[fromIndex + 1].layerAt(index)
+private fun interpolateCardFrame(
+    index: Int,
+    stepProgress: Float,
+    lastIndex: Int,
+): CardFrame {
+    val clampedStep = stepProgress.coerceIn(0f, lastIndex.coerceAtLeast(0).toFloat())
+    val fromStep = floor(clampedStep).toInt()
+    val toStep = (fromStep + 1).coerceAtMost(lastIndex.coerceAtLeast(0))
+    val segment = clampedStep - fromStep
+    val start = cardFrameAtStep(index, fromStep, lastIndex)
+    val end = cardFrameAtStep(index, toStep, lastIndex)
     return CardFrame(
         offsetY = interpolate(start.offsetY, end.offsetY, segment),
         backgroundColor = interpolateColor(start.backgroundColor, end.backgroundColor, segment),
@@ -1747,9 +1766,70 @@ private fun interpolateCardFrame(index: Int, progress: Float): CardFrame {
     )
 }
 
+private fun cardFrameAtStep(
+    index: Int,
+    step: Int,
+    lastIndex: Int,
+): CardFrame {
+    val activeStep = step.coerceIn(0, lastIndex.coerceAtLeast(0))
+    val activeSlot = activeStep.coerceAtMost(StackStepFrames.lastIndex)
+    val slot = index
+    return when {
+        activeStep <= StackStepFrames.lastIndex && slot in 0..StackStepFrames.lastIndex ->
+            StackStepFrames[activeSlot][slot]
+        slot < activeStep -> stackedOverflowCardFrame(slot)
+        slot == activeStep -> keyframe(overflowStackOffset(slot), peekSolidFront())
+        slot > activeStep -> futureCardFrame(
+            slot = slot,
+            activeStep = activeStep,
+        )
+        else -> StackStepFrames.last()[0]
+    }
+}
+
+private fun stackedOverflowCardFrame(slot: Int): CardFrame =
+    keyframe(
+        offsetY = overflowStackOffset(slot),
+        frame = if (slot < StackStepFrames.lastIndex) {
+            StackStepFrames.last()[slot]
+        } else {
+            CardFrame(
+                backgroundColor = SolarColors.CardBackgroundSolid,
+                planetAlpha = PeekPlanetAlpha,
+            )
+        },
+    )
+
+private fun futureCardFrame(
+    slot: Int,
+    activeStep: Int,
+): CardFrame {
+    val activeOffset = overflowStackOffset(activeStep)
+    val distanceFromActive = slot - activeStep
+    return keyframe(activeOffset + (CardHeight + CardListGap) * distanceFromActive)
+}
+
+private fun overflowStackOffset(slot: Int): Dp =
+    14.dp * slot
+
+private fun visibleCardRange(
+    stepProgress: Float,
+    lastIndex: Int,
+): IntRange {
+    if (lastIndex < 0) return IntRange.EMPTY
+
+    val fromStep = floor(stepProgress.coerceAtLeast(0f)).toInt().coerceAtMost(lastIndex)
+    val toStep = (fromStep + 1).coerceAtMost(lastIndex)
+    val last = maxOf(VisibleStackSlots - 1, toStep + 1).coerceAtMost(lastIndex)
+    return 0..last
+}
+
+private fun stackStyleProgress(activeStep: Int): Float =
+    1f - (activeStep.coerceIn(0, StackStepFrames.lastIndex) / StackStepFrames.lastIndex.toFloat())
+
 private fun defaultStackLayers(): List<CardFrame> {
     val pitch = CardHeight + CardListGap
-    return List(7) { index -> keyframe(pitch * index) }
+    return List(VisibleStackSlots) { index -> keyframe(pitch * index) }
 }
 
 private fun keyframe(offsetY: Dp, frame: CardFrame = CardFrame()) =
@@ -1842,14 +1922,14 @@ private val StackVariant7Layers = listOf(
     keyframe(84.dp, peekSolidFront()),
 )
 
-private val StackKeyframes: List<List<CardFrame>> = listOf(
-    StackVariant7Layers,
-    StackVariant6Layers,
-    StackVariant5Layers,
-    StackVariant4Layers,
-    StackVariant3Layers,
-    StackVariant2Layers,
+private val StackStepFrames: List<List<CardFrame>> = listOf(
     defaultStackLayers(),
+    StackVariant2Layers,
+    StackVariant3Layers,
+    StackVariant4Layers,
+    StackVariant5Layers,
+    StackVariant6Layers,
+    StackVariant7Layers,
 )
 
 private fun peekSolidTagline() = CardFrame(
@@ -1867,32 +1947,33 @@ private fun peekSolidStatsOnly() = CardFrame(
 
 private fun peekSolidFront() = CardFrame(backgroundColor = SolarColors.CardBackgroundSolid)
 
-private fun List<CardFrame>.layerAt(index: Int): CardFrame =
-    getOrElse(index) { last() }
-
 private fun Density.isCardBodyHit(
     position: Offset,
     cardWidthPx: Float,
-    stackProgress: Float,
-    planets: List<PlanetCardModel>,
+    stepProgress: Float,
+    lastIndex: Int,
 ): Boolean {
     if (position.x !in 0f..cardWidthPx) return false
 
     val topPadding = CardStackTopPadding.toPx()
     val cardHeight = CardHeight.toPx()
-    return planets.indices.any { index ->
-        val top = topPadding + interpolateCardFrame(index, stackProgress).offsetY.toPx()
+    return visibleCardRange(stepProgress, lastIndex).any { index ->
+        val top = topPadding + interpolateCardFrame(
+            index = index,
+            stepProgress = stepProgress,
+            lastIndex = lastIndex,
+        ).offsetY.toPx()
         position.y in top..(top + cardHeight)
     }
 }
 
 private fun stackZIndex(
     index: Int,
-    lastIndex: Int,
+    boostedIndex: Int,
     stackProgress: Float,
 ): Float {
     val stackedAmount = 1f - stackProgress.coerceIn(0f, 1f)
-    val lastCardBoost = if (index == lastIndex && stackedAmount > 0.82f) 100f else 0f
+    val lastCardBoost = if (index == boostedIndex && stackedAmount > 0.82f) 100f else 0f
     return index.toFloat() + lastCardBoost
 }
 
@@ -1924,13 +2005,13 @@ private fun cardSettleTranslationY(
 private fun cardFloatingScale(
     index: Int,
     activeIndex: Int,
-    stackProgress: Float,
+    stepProgress: Float,
     cardCount: Int,
 ): Float {
     if (cardCount <= 1) return 1f
 
-    val fractionalStep = (1f - stackProgress.coerceIn(0f, 1f)) * (cardCount - 1)
-    val travelAmount = 1f - (abs(fractionalStep - fractionalStep.roundToInt()) * 2f).coerceIn(0f, 1f)
+    val clampedStep = stepProgress.coerceIn(0f, (cardCount - 1).toFloat())
+    val travelAmount = 1f - (abs(clampedStep - clampedStep.roundToInt()) * 2f).coerceIn(0f, 1f)
     if (travelAmount == 0f) return 1f
 
     val activeDistance = abs(index - activeIndex)
