@@ -2301,101 +2301,57 @@ private fun defaultStackLayers(): List<CardFrame> {
 private fun keyframe(offsetY: Dp, frame: CardFrame = CardFrame()) =
     frame.copy(offsetY = offsetY)
 
-private val StackVariant2Layers = listOf(
-    keyframe(
-        0.dp,
-        CardFrame(
-            backgroundColor = SolarColors.CardBackgroundSolid,
-            planetAlpha = PeekPlanetAlpha,
-            elevatedTitleAlpha = 1f,
-        ),
-    ),
-    keyframe(14.dp, peekSolidFront()),
-    keyframe(288.dp),
-    keyframe(562.dp),
-    keyframe(836.dp),
-    keyframe(1110.dp),
-    keyframe(1384.dp),
-)
-
-private val StackVariant3Layers = listOf(
-    keyframe(0.dp, peekSolidTagline()),
-    keyframe(14.dp, peekSolidStatsOnly().copy(elevatedTitleAlpha = 1f)),
-    keyframe(28.dp, peekSolidFront()),
-    keyframe(302.dp),
-    keyframe(576.dp),
-    keyframe(850.dp),
-    keyframe(1124.dp),
-)
-
-private val StackVariant4Layers = listOf(
-    keyframe(0.dp, peekSolidTagline()),
-    keyframe(14.dp, peekSolidStatsOnly().copy(elevatedTitleAlpha = 1f)),
-    keyframe(28.dp, peekSolidTagline().copy(elevatedTitleAlpha = 1f)),
-    keyframe(42.dp, peekSolidFront()),
-    keyframe(316.dp),
-    keyframe(590.dp),
-    keyframe(864.dp),
-)
-
-private val StackVariant5Layers = listOf(
-    keyframe(0.dp, peekSolidTagline()),
-    keyframe(14.dp, peekSolidStatsOnly()),
-    keyframe(28.dp, peekSolidTagline()),
-    keyframe(42.dp, peekSolidTagline().copy(planetOffsetY = (-15.5).dp)),
-    keyframe(56.dp, peekSolidFront()),
-    keyframe(330.dp),
-    keyframe(604.dp),
-)
-
-private val StackVariant6Layers = listOf(
-    keyframe(0.dp, peekSolidTagline()),
-    keyframe(14.dp, peekSolidStatsOnly()),
-    keyframe(28.dp, peekSolidTagline()),
-    keyframe(42.dp, peekSolidTagline().copy(planetOffsetY = (-15.5).dp)),
-    keyframe(
-        56.dp,
-        CardFrame(
-            backgroundColor = SolarColors.CardBackgroundSolid,
-            planetAlpha = PeekPlanetAlpha,
-            elevatedTitleAlpha = 1f,
-        ),
-    ),
-    keyframe(70.dp, peekSolidFront()),
-    keyframe(344.dp),
-)
-
-private val StackVariant7Layers = listOf(
-    keyframe(0.dp, peekSolidTagline()),
-    keyframe(14.dp, peekSolidStatsOnly()),
-    keyframe(28.dp, peekSolidTagline()),
-    keyframe(42.dp, peekSolidTagline().copy(planetOffsetY = (-15.5).dp)),
-    keyframe(
-        56.dp,
-        CardFrame(
-            backgroundColor = SolarColors.CardBackgroundSolid,
-            planetAlpha = PeekPlanetAlpha,
-            elevatedTitleAlpha = 1f,
-        ),
-    ),
-    keyframe(
-        70.dp,
-        CardFrame(
-            backgroundColor = SolarColors.CardBackgroundSolid,
-            planetAlpha = PeekPlanetAlpha,
-        ),
-    ),
-    keyframe(84.dp, peekSolidFront()),
-)
+private fun stackStep(vararg stackedFrames: CardFrame): List<CardFrame> {
+    val normalPitch = CardHeight + CardListGap
+    val frontIndex = stackedFrames.lastIndex
+    val frontOffset = stackedFrames.last().offsetY
+    return stackedFrames.toList() + List(VisibleStackSlots - stackedFrames.size) { tailIndex ->
+        val index = stackedFrames.size + tailIndex
+        keyframe(frontOffset + normalPitch * (index - frontIndex))
+    }
+}
 
 private val StackStepFrames: List<List<CardFrame>> = listOf(
     defaultStackLayers(),
-    StackVariant2Layers,
-    StackVariant3Layers,
-    StackVariant4Layers,
-    StackVariant5Layers,
-    StackVariant6Layers,
-    StackVariant7Layers,
+    stackStep(
+        keyframe(0.dp, peekSolidElevatedTitle()),
+        keyframe(14.dp, peekSolidFront()),
+    ),
+    stackStep(
+        keyframe(0.dp, peekSolidTagline()),
+        keyframe(14.dp, peekSolidStatsOnly().copy(elevatedTitleAlpha = 1f)),
+        keyframe(28.dp, peekSolidFront()),
+    ),
+    stackStep(
+        keyframe(0.dp, peekSolidTagline()),
+        keyframe(14.dp, peekSolidStatsOnly().copy(elevatedTitleAlpha = 1f)),
+        keyframe(28.dp, peekSolidTagline().copy(elevatedTitleAlpha = 1f)),
+        keyframe(42.dp, peekSolidFront()),
+    ),
+    stackStep(
+        keyframe(0.dp, peekSolidTagline()),
+        keyframe(14.dp, peekSolidStatsOnly()),
+        keyframe(28.dp, peekSolidTagline()),
+        keyframe(42.dp, peekSolidTagline().copy(planetOffsetY = (-15.5).dp)),
+        keyframe(56.dp, peekSolidFront()),
+    ),
+    stackStep(
+        keyframe(0.dp, peekSolidTagline()),
+        keyframe(14.dp, peekSolidStatsOnly()),
+        keyframe(28.dp, peekSolidTagline()),
+        keyframe(42.dp, peekSolidTagline().copy(planetOffsetY = (-15.5).dp)),
+        keyframe(56.dp, peekSolidElevatedTitle()),
+        keyframe(70.dp, peekSolidFront()),
+    ),
+    stackStep(
+        keyframe(0.dp, peekSolidTagline()),
+        keyframe(14.dp, peekSolidStatsOnly()),
+        keyframe(28.dp, peekSolidTagline()),
+        keyframe(42.dp, peekSolidTagline().copy(planetOffsetY = (-15.5).dp)),
+        keyframe(56.dp, peekSolidElevatedTitle()),
+        keyframe(70.dp, peekSolidPlanetOnly()),
+        keyframe(84.dp, peekSolidFront()),
+    ),
 )
 
 private fun peekSolidTagline() = CardFrame(
@@ -2409,6 +2365,17 @@ private fun peekSolidStatsOnly() = CardFrame(
     planetAlpha = PeekPlanetAlpha,
     titleAlpha = 0f,
     taglineAlpha = 0f,
+)
+
+private fun peekSolidElevatedTitle() = CardFrame(
+    backgroundColor = SolarColors.CardBackgroundSolid,
+    planetAlpha = PeekPlanetAlpha,
+    elevatedTitleAlpha = 1f,
+)
+
+private fun peekSolidPlanetOnly() = CardFrame(
+    backgroundColor = SolarColors.CardBackgroundSolid,
+    planetAlpha = PeekPlanetAlpha,
 )
 
 private fun peekSolidFront() = CardFrame(backgroundColor = SolarColors.CardBackgroundSolid)
