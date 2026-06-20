@@ -40,6 +40,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -496,49 +497,188 @@ private suspend fun AwaitPointerEventScope.handleScreenMotionGesture(
     val velocityTracker = VelocityTracker()
     velocityTracker.addPosition(down.uptimeMillis, down.position)
 
-    val gestureStartProgress = anchoredProgress.value.coerceIn(0f, 1f)
-    val startedInCardSection = down.position.y >= cardSectionTopPx
-    var latestProgress = gestureStartProgress
-    var totalDragY = 0f
-    var draggingScreenMotion = false
-    var progressSnapJob: Job? = null
+    val dragResult = trackScreenMotionDrag(
+        down = down,
+        velocityTracker = velocityTracker,
+        cardsAtFirstStep = cardsAtFirstStep,
+        dragRangePx = dragRangePx,
+        cardSectionTopPx = cardSectionTopPx,
+        scope = scope,
+        anchoredProgress = anchoredProgress,
+    ) ?: return
+
+    settleScreenMotion(
+        latestProgress = dragResult.latestProgress,
+        velocityY = dragResult.velocityY,
+        velocityThresholdPx = swipeVelocityThresholdPx,
+        scope = scope,
+        anchoredProgress = anchoredProgress,
+    )
+}
+
+private data class ScreenMotionDragResult(
+    val latestProgress: Float,
+    val velocityY: Float,
+)
+
+private suspend fun AwaitPointerEventScope.trackScreenMotionDrag(
+    down: PointerInputChange,
+    velocityTracker: VelocityTracker,
+    cardsAtFirstStep: Boolean,
+    dragRangePx: Float,
+    cardSectionTopPx: Float,
+    scope: CoroutineScope,
+    anchoredProgress: Animatable<Float, AnimationVector1D>,
+): ScreenMotionDragResult? {
+    val dragState = ScreenMotionDragState(
+        gestureStartProgress = anchoredProgress.value.coerceIn(0f, 1f),
+        startedInCardSection = down.position.y >= cardSectionTopPx,
+    )
 
     while (true) {
-        val event = awaitPointerEvent(PointerEventPass.Initial)
-        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-        if (!change.pressed) break
-
-        totalDragY += change.positionChange().y
-        velocityTracker.addPosition(change.uptimeMillis, change.position)
-        if (!draggingScreenMotion && abs(totalDragY) >= viewConfiguration.touchSlop) {
-            if (!canStartScreenMotion(
-                    totalDragY = totalDragY,
-                    gestureStartProgress = gestureStartProgress,
-                    startedInCardSection = startedInCardSection,
-                    cardsAtFirstStep = cardsAtFirstStep,
-                )
-            ) {
-                continue
-            }
-            draggingScreenMotion = true
-        }
-
-        if (draggingScreenMotion) {
-            change.consume()
-            latestProgress = (gestureStartProgress - totalDragY / dragRangePx).coerceIn(0f, 1f)
-            progressSnapJob?.cancel()
-            progressSnapJob = scope.launch {
-                anchoredProgress.snapTo(latestProgress)
-            }
-        }
+        val change = awaitTrackedPointerChange(down) ?: break
+        updateScreenMotionDrag(
+            state = dragState,
+            change = change,
+            velocityTracker = velocityTracker,
+            cardsAtFirstStep = cardsAtFirstStep,
+            dragRangePx = dragRangePx,
+            scope = scope,
+            anchoredProgress = anchoredProgress,
+        )
     }
 
-    if (!draggingScreenMotion) return
+    return finishScreenMotionDrag(
+        state = dragState,
+        velocityTracker = velocityTracker,
+    )
+}
 
-    progressSnapJob?.cancel()
+private class ScreenMotionDragState(
+    val gestureStartProgress: Float,
+    val startedInCardSection: Boolean,
+) {
+    var latestProgress: Float = gestureStartProgress
+    var totalDragY: Float = 0f
+    var isDragging: Boolean = false
+    var snapJob: Job? = null
+}
+
+private fun AwaitPointerEventScope.updateScreenMotionDrag(
+    state: ScreenMotionDragState,
+    change: PointerInputChange,
+    velocityTracker: VelocityTracker,
+    cardsAtFirstStep: Boolean,
+    dragRangePx: Float,
+    scope: CoroutineScope,
+    anchoredProgress: Animatable<Float, AnimationVector1D>,
+) {
+    state.totalDragY += change.positionChange().y
+    velocityTracker.addPosition(change.uptimeMillis, change.position)
+    state.startIfAllowed(
+        touchSlop = viewConfiguration.touchSlop,
+        cardsAtFirstStep = cardsAtFirstStep,
+    )
+    if (state.isDragging) {
+        snapScreenProgress(
+            state = state,
+            change = change,
+            dragRangePx = dragRangePx,
+            scope = scope,
+            anchoredProgress = anchoredProgress,
+        )
+    }
+}
+
+private fun ScreenMotionDragState.startIfAllowed(
+    touchSlop: Float,
+    cardsAtFirstStep: Boolean,
+) {
+    if (!isDragging && canStartScreenMotionDrag(
+            totalDragY = totalDragY,
+            touchSlop = touchSlop,
+            gestureStartProgress = gestureStartProgress,
+            startedInCardSection = startedInCardSection,
+            cardsAtFirstStep = cardsAtFirstStep,
+        )
+    ) {
+        isDragging = true
+    }
+}
+
+private fun snapScreenProgress(
+    state: ScreenMotionDragState,
+    change: PointerInputChange,
+    dragRangePx: Float,
+    scope: CoroutineScope,
+    anchoredProgress: Animatable<Float, AnimationVector1D>,
+) {
+    change.consume()
+    state.latestProgress = draggedScreenProgress(
+        gestureStartProgress = state.gestureStartProgress,
+        totalDragY = state.totalDragY,
+        dragRangePx = dragRangePx,
+    )
+    state.snapJob?.cancel()
+    state.snapJob = scope.launch {
+        anchoredProgress.snapTo(state.latestProgress)
+    }
+}
+
+private fun finishScreenMotionDrag(
+    state: ScreenMotionDragState,
+    velocityTracker: VelocityTracker,
+): ScreenMotionDragResult? {
+    state.snapJob?.cancel()
+    return if (state.isDragging) {
+        ScreenMotionDragResult(
+            latestProgress = state.latestProgress,
+            velocityY = velocityTracker.calculateVelocity().y,
+        )
+    } else {
+        null
+    }
+}
+
+private suspend fun AwaitPointerEventScope.awaitTrackedPointerChange(
+    down: PointerInputChange,
+): PointerInputChange? {
+    val event = awaitPointerEvent(PointerEventPass.Initial)
+    val change = event.changes.firstOrNull { it.id == down.id } ?: return null
+    return change.takeIf { it.pressed }
+}
+
+private fun canStartScreenMotionDrag(
+    totalDragY: Float,
+    touchSlop: Float,
+    gestureStartProgress: Float,
+    startedInCardSection: Boolean,
+    cardsAtFirstStep: Boolean,
+): Boolean =
+    abs(totalDragY) >= touchSlop && canStartScreenMotion(
+        totalDragY = totalDragY,
+        gestureStartProgress = gestureStartProgress,
+        startedInCardSection = startedInCardSection,
+        cardsAtFirstStep = cardsAtFirstStep,
+    )
+
+private fun draggedScreenProgress(
+    gestureStartProgress: Float,
+    totalDragY: Float,
+    dragRangePx: Float,
+): Float =
+    (gestureStartProgress - totalDragY / dragRangePx).coerceIn(0f, 1f)
+
+private fun settleScreenMotion(
+    latestProgress: Float,
+    velocityY: Float,
+    velocityThresholdPx: Float,
+    scope: CoroutineScope,
+    anchoredProgress: Animatable<Float, AnimationVector1D>,
+) {
     val target = targetScreenAnchor(
-        velocityY = velocityTracker.calculateVelocity().y,
-        velocityThresholdPx = swipeVelocityThresholdPx,
+        velocityY = velocityY,
+        velocityThresholdPx = velocityThresholdPx,
         latestProgress = latestProgress,
     )
     scope.launch {
@@ -948,23 +1088,28 @@ private fun SwipeHintFooter(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy((-4).dp),
-        ) {
-            SwipeHintArrowLayers.forEach { layerRes ->
-                SwipeArrowLayer(
-                    res = layerRes,
-                    glowColor = SolarColors.SwipeHintArrowGlow,
-                )
-            }
-        }
-        Text(
-            text = "Swipe up to explore",
-            style = SolarTypography.SwipeHint,
-            textAlign = TextAlign.Center,
-        )
+        SwipeHintContent()
     }
+}
+
+@Composable
+private fun SwipeHintContent() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy((-4).dp),
+    ) {
+        SwipeHintArrowLayers.forEach { layerRes ->
+            SwipeArrowLayer(
+                res = layerRes,
+                glowColor = SolarColors.SwipeHintArrowGlow,
+            )
+        }
+    }
+    Text(
+        text = "Swipe up to explore",
+        style = SolarTypography.SwipeHint,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable
@@ -987,25 +1132,41 @@ private fun SwipeArrowLayer(
             ),
     ) {
         if (usesBlurShadow) {
-            Image(
-                painter = painterResource(res),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(glowColor.copy(alpha = 1f)),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset(y = SwipeArrowShadowOffsetY)
-                    .blur(SwipeArrowShadowBlur)
-                    .alpha(glowColor.alpha),
-                contentScale = ContentScale.Fit,
+            SwipeArrowBlurShadow(
+                res = res,
+                glowColor = glowColor,
             )
         }
-        Image(
-            painter = painterResource(res),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit,
-        )
+        SwipeArrowImage(res = res)
     }
+}
+
+@Composable
+private fun SwipeArrowBlurShadow(
+    @DrawableRes res: Int,
+    glowColor: Color,
+) {
+    Image(
+        painter = painterResource(res),
+        contentDescription = null,
+        colorFilter = ColorFilter.tint(glowColor.copy(alpha = 1f)),
+        modifier = Modifier
+            .fillMaxSize()
+            .offset(y = SwipeArrowShadowOffsetY)
+            .blur(SwipeArrowShadowBlur)
+            .alpha(glowColor.alpha),
+        contentScale = ContentScale.Fit,
+    )
+}
+
+@Composable
+private fun SwipeArrowImage(@DrawableRes res: Int) {
+    Image(
+        painter = painterResource(res),
+        contentDescription = null,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Fit,
+    )
 }
 
 @Composable
@@ -1015,34 +1176,67 @@ private fun ScrollableInterpolatedPlanetCardStack(
     modifier: Modifier = Modifier,
     planets: List<PlanetCardModel> = PlanetCatalog.all,
 ) {
-    if (planets.isEmpty()) {
-        LaunchedEffect(onFirstStepChanged) {
-            onFirstStepChanged(true)
-        }
-        Box(modifier = modifier)
+    if (planetCardStackEmptyState(planets, onFirstStepChanged, modifier)) {
         return
     }
 
     val density = LocalDensity.current
     val motionScope = rememberCoroutineScope()
+    val stackState = rememberPlanetCardStackState(planets)
+    val activeStep by rememberActiveStackStep(stackState)
+    val visibleCardRange by rememberVisibleCardRange(stackState, planets)
+
+    ReportFirstStackStep(
+        stepProgress = stackState.stepProgress,
+        onFirstStepChanged = onFirstStepChanged,
+    )
+
+    PlanetCardStackContainer(
+        entranceStackProgressProvider = entranceStackProgressProvider,
+        planets = planets,
+        activeStep = activeStep,
+        visibleCardRange = visibleCardRange,
+        density = density,
+        motionScope = motionScope,
+        stackState = stackState,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun planetCardStackEmptyState(
+    planets: List<PlanetCardModel>,
+    onFirstStepChanged: (Boolean) -> Unit,
+    modifier: Modifier,
+): Boolean {
+    if (planets.isNotEmpty()) return false
+
+    LaunchedEffect(onFirstStepChanged) {
+        onFirstStepChanged(true)
+    }
+    Box(modifier = modifier)
+    return true
+}
+
+private data class PlanetCardStackState(
+    val maxStep: Int,
+    val stepProgress: Animatable<Float, AnimationVector1D>,
+    val cardSettlePhase: Animatable<Float, AnimationVector1D>,
+    val settledStep: MutableIntState,
+    val settleDirection: MutableFloatState,
+    val snapAnimationSpec: AnimationSpec<Float>,
+    val settleAnimationSpec: AnimationSpec<Float>,
+)
+
+@Composable
+private fun rememberPlanetCardStackState(
+    planets: List<PlanetCardModel>,
+): PlanetCardStackState {
     val maxStep = (planets.size - 1).coerceAtLeast(0)
     val stepProgress = remember { Animatable(0f) }
     val cardSettlePhase = remember { Animatable(1f) }
     val settledStep = remember { mutableIntStateOf(0) }
     val settleDirection = remember { mutableFloatStateOf(0f) }
-    val activeStep by remember(maxStep) {
-        derivedStateOf {
-            stepProgress.value.roundToInt().coerceIn(0, maxStep)
-        }
-    }
-    val visibleCardRange by remember(maxStep) {
-        derivedStateOf {
-            visibleCardRange(
-                stepProgress = stepProgress.value,
-                lastIndex = planets.lastIndex,
-            )
-        }
-    }
     val snapAnimationSpec: AnimationSpec<Float> = remember {
         tween(
             durationMillis = 1020,
@@ -1055,7 +1249,48 @@ private fun ScrollableInterpolatedPlanetCardStack(
             easing = LinearEasing,
         )
     }
+    return remember(maxStep) {
+        PlanetCardStackState(
+            maxStep = maxStep,
+            stepProgress = stepProgress,
+            cardSettlePhase = cardSettlePhase,
+            settledStep = settledStep,
+            settleDirection = settleDirection,
+            snapAnimationSpec = snapAnimationSpec,
+            settleAnimationSpec = settleAnimationSpec,
+        )
+    }
+}
 
+@Composable
+private fun rememberActiveStackStep(
+    stackState: PlanetCardStackState,
+): State<Int> =
+    remember(stackState.maxStep) {
+        derivedStateOf {
+            stackState.stepProgress.value.roundToInt().coerceIn(0, stackState.maxStep)
+        }
+    }
+
+@Composable
+private fun rememberVisibleCardRange(
+    stackState: PlanetCardStackState,
+    planets: List<PlanetCardModel>,
+): State<IntRange> =
+    remember(stackState.maxStep) {
+        derivedStateOf {
+            visibleCardRange(
+                stepProgress = stackState.stepProgress.value,
+                lastIndex = planets.lastIndex,
+            )
+        }
+    }
+
+@Composable
+private fun ReportFirstStackStep(
+    stepProgress: Animatable<Float, AnimationVector1D>,
+    onFirstStepChanged: (Boolean) -> Unit,
+) {
     LaunchedEffect(stepProgress) {
         snapshotFlow { stepProgress.value <= 0.01f }
             .distinctUntilChanged()
@@ -1063,31 +1298,37 @@ private fun ScrollableInterpolatedPlanetCardStack(
                 onFirstStepChanged(atFirstStep)
             }
     }
+}
 
+@Composable
+private fun PlanetCardStackContainer(
+    entranceStackProgressProvider: () -> Float,
+    planets: List<PlanetCardModel>,
+    activeStep: Int,
+    visibleCardRange: IntRange,
+    density: Density,
+    motionScope: CoroutineScope,
+    stackState: PlanetCardStackState,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
             .planetCardStackDrag(
                 entranceStackProgressProvider = entranceStackProgressProvider,
                 planets = planets,
-                maxStep = maxStep,
                 density = density,
                 motionScope = motionScope,
-                stepProgress = stepProgress,
-                cardSettlePhase = cardSettlePhase,
-                settledStep = settledStep,
-                settleDirection = settleDirection,
-                snapAnimationSpec = snapAnimationSpec,
-                settleAnimationSpec = settleAnimationSpec,
+                stackState = stackState,
             ),
     ) {
         InterpolatedPlanetCardStack(
-            stepProgressProvider = { stepProgress.value },
+            stepProgressProvider = { stackState.stepProgress.value },
             activeCardIndexProvider = {
                 activeStep.coerceIn(0, planets.lastIndex)
             },
-            settlePhaseProvider = { cardSettlePhase.value },
-            settleDirectionProvider = { settleDirection.floatValue },
+            settlePhaseProvider = { stackState.cardSettlePhase.value },
+            settleDirectionProvider = { stackState.settleDirection.floatValue },
             styleStackProgress = stackStyleProgress(activeStep),
             visibleCardRange = visibleCardRange,
             planets = planets,
@@ -1101,104 +1342,135 @@ private fun ScrollableInterpolatedPlanetCardStack(
 private fun Modifier.planetCardStackDrag(
     entranceStackProgressProvider: () -> Float,
     planets: List<PlanetCardModel>,
-    maxStep: Int,
     density: Density,
     motionScope: CoroutineScope,
-    stepProgress: Animatable<Float, AnimationVector1D>,
-    cardSettlePhase: Animatable<Float, AnimationVector1D>,
-    settledStep: MutableIntState,
-    settleDirection: MutableFloatState,
-    snapAnimationSpec: AnimationSpec<Float>,
-    settleAnimationSpec: AnimationSpec<Float>,
-): Modifier = pointerInput(maxStep, density) {
-    val snapDistance = 260.dp.toPx()
-    val distanceThreshold = 84.dp.toPx()
-    val velocityThreshold = 850.dp.toPx()
+    stackState: PlanetCardStackState,
+): Modifier = pointerInput(stackState.maxStep, density) {
+    val gestureContext = CardStackGestureContext(
+        entranceStackProgressProvider = entranceStackProgressProvider,
+        planets = planets,
+        density = density,
+        motionScope = motionScope,
+        stackState = stackState,
+        thresholds = CardStackGestureThresholds(
+            snapDistance = 260.dp.toPx(),
+            distanceThreshold = 84.dp.toPx(),
+            velocityThreshold = 850.dp.toPx(),
+        ),
+    )
 
     awaitEachGesture {
-        handleCardStackGesture(
-            entranceStackProgressProvider = entranceStackProgressProvider,
-            planets = planets,
-            maxStep = maxStep,
-            density = density,
-            motionScope = motionScope,
-            stepProgress = stepProgress,
-            cardSettlePhase = cardSettlePhase,
-            settledStep = settledStep,
-            settleDirection = settleDirection,
-            snapAnimationSpec = snapAnimationSpec,
-            settleAnimationSpec = settleAnimationSpec,
-            snapDistance = snapDistance,
-            distanceThreshold = distanceThreshold,
-            velocityThreshold = velocityThreshold,
-        )
+        handleCardStackGesture(gestureContext)
     }
 }
 
+private data class CardStackGestureThresholds(
+    val snapDistance: Float,
+    val distanceThreshold: Float,
+    val velocityThreshold: Float,
+)
+
+private data class CardStackGestureContext(
+    val entranceStackProgressProvider: () -> Float,
+    val planets: List<PlanetCardModel>,
+    val density: Density,
+    val motionScope: CoroutineScope,
+    val stackState: PlanetCardStackState,
+    val thresholds: CardStackGestureThresholds,
+)
+
 private suspend fun AwaitPointerEventScope.handleCardStackGesture(
-    entranceStackProgressProvider: () -> Float,
-    planets: List<PlanetCardModel>,
-    maxStep: Int,
-    density: Density,
-    motionScope: CoroutineScope,
-    stepProgress: Animatable<Float, AnimationVector1D>,
-    cardSettlePhase: Animatable<Float, AnimationVector1D>,
-    settledStep: MutableIntState,
-    settleDirection: MutableFloatState,
-    snapAnimationSpec: AnimationSpec<Float>,
-    settleAnimationSpec: AnimationSpec<Float>,
-    snapDistance: Float,
-    distanceThreshold: Float,
-    velocityThreshold: Float,
+    context: CardStackGestureContext,
 ) {
+    val gestureStart = awaitCardStackGestureStart(
+        context = context,
+    ) ?: return
+
+    val dragResult = trackCardDrag(
+        down = gestureStart.down,
+        velocityTracker = gestureStart.velocityTracker,
+        hitCardBody = gestureStart.hitCardBody,
+        gestureStartStep = gestureStart.step,
+        gestureStartProgress = gestureStart.progress,
+        maxStep = context.stackState.maxStep,
+        snapDistance = context.thresholds.snapDistance,
+        motionScope = context.motionScope,
+        stepProgress = context.stackState.stepProgress,
+        settleDirection = context.stackState.settleDirection,
+    ) ?: return
+
+    settleCardStackGesture(
+        gestureStartStep = gestureStart.step,
+        dragResult = dragResult,
+        context = context,
+    )
+}
+
+private data class CardStackGestureStart(
+    val down: PointerInputChange,
+    val velocityTracker: VelocityTracker,
+    val step: Int,
+    val progress: Float,
+    val hitCardBody: Boolean,
+)
+
+private suspend fun AwaitPointerEventScope.awaitCardStackGestureStart(
+    context: CardStackGestureContext,
+): CardStackGestureStart? {
     val down = awaitFirstDown(requireUnconsumed = false)
-    if (entranceStackProgressProvider() < 0.95f) return
+    if (context.entranceStackProgressProvider() < 0.95f) return null
 
     val velocityTracker = VelocityTracker()
     velocityTracker.addPosition(down.uptimeMillis, down.position)
-    val gestureStartStep = settledStep.intValue
-    val gestureStartProgress = stepProgress.value
-    val cardStackWidthPx = size.width.toFloat()
-    val hitCardBody = with(density) {
-        isCardBodyHit(
-            position = down.position,
-            cardWidthPx = cardStackWidthPx,
-            stepProgress = stepProgress.value,
-            lastIndex = planets.lastIndex,
-        )
-    }
-    val dragResult = trackCardDrag(
+    return CardStackGestureStart(
         down = down,
         velocityTracker = velocityTracker,
-        hitCardBody = hitCardBody,
-        gestureStartStep = gestureStartStep,
-        gestureStartProgress = gestureStartProgress,
-        maxStep = maxStep,
-        snapDistance = snapDistance,
-        motionScope = motionScope,
-        stepProgress = stepProgress,
-        settleDirection = settleDirection,
-    ) ?: return
+        step = context.stackState.settledStep.intValue,
+        progress = context.stackState.stepProgress.value,
+        hitCardBody = hitCardBody(
+            down = down,
+            context = context,
+        ),
+    )
+}
 
+private fun AwaitPointerEventScope.hitCardBody(
+    down: PointerInputChange,
+    context: CardStackGestureContext,
+): Boolean =
+    with(context.density) {
+        isCardBodyHit(
+            position = down.position,
+            cardWidthPx = size.width.toFloat(),
+            stepProgress = context.stackState.stepProgress.value,
+            lastIndex = context.planets.lastIndex,
+        )
+    }
+
+private fun settleCardStackGesture(
+    gestureStartStep: Int,
+    dragResult: CardDragResult,
+    context: CardStackGestureContext,
+) {
     val targetStep = targetCardStep(
         gestureStartStep = gestureStartStep,
         latestDraggedStep = dragResult.latestDraggedStep,
         velocityY = dragResult.velocityY,
-        velocityThreshold = velocityThreshold,
-        distanceThreshold = distanceThreshold,
-        snapDistance = snapDistance,
-        maxStep = maxStep,
+        velocityThreshold = context.thresholds.velocityThreshold,
+        distanceThreshold = context.thresholds.distanceThreshold,
+        snapDistance = context.thresholds.snapDistance,
+        maxStep = context.stackState.maxStep,
     )
     animateCardStackToStep(
         targetStep = targetStep,
         latestDraggedStep = dragResult.latestDraggedStep,
-        motionScope = motionScope,
-        stepProgress = stepProgress,
-        cardSettlePhase = cardSettlePhase,
-        settledStep = settledStep,
-        settleDirection = settleDirection,
-        snapAnimationSpec = snapAnimationSpec,
-        settleAnimationSpec = settleAnimationSpec,
+        motionScope = context.motionScope,
+        stepProgress = context.stackState.stepProgress,
+        cardSettlePhase = context.stackState.cardSettlePhase,
+        settledStep = context.stackState.settledStep,
+        settleDirection = context.stackState.settleDirection,
+        snapAnimationSpec = context.stackState.snapAnimationSpec,
+        settleAnimationSpec = context.stackState.settleAnimationSpec,
     )
 }
 
@@ -1219,52 +1491,125 @@ private suspend fun AwaitPointerEventScope.trackCardDrag(
     stepProgress: Animatable<Float, AnimationVector1D>,
     settleDirection: MutableFloatState,
 ): CardDragResult? {
-    var totalDragY = 0f
-    var isDraggingCard = false
-    var dragSnapJob: Job? = null
-    var latestDraggedStep = gestureStartProgress
+    val dragState = CardDragState(
+        hitCardBody = hitCardBody,
+        gestureStartStep = gestureStartStep,
+        gestureStartProgress = gestureStartProgress,
+    )
 
     while (true) {
-        val event = awaitPointerEvent()
-        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-        if (!change.pressed) break
-
-        totalDragY += change.positionChange().y
-        velocityTracker.addPosition(change.uptimeMillis, change.position)
-        if (!isDraggingCard && abs(totalDragY) >= viewConfiguration.touchSlop) {
-            if (!canStartCardDrag(
-                    totalDragY = totalDragY,
-                    hitCardBody = hitCardBody,
-                    gestureStartStep = gestureStartStep,
-                    maxStep = maxStep,
-                )
-            ) {
-                change.consume()
-                break
-            }
-            isDraggingCard = true
-        }
-
-        if (isDraggingCard) {
-            change.consume()
-            settleDirection.floatValue = 0f
-            latestDraggedStep = draggedStep(
-                gestureStartProgress = gestureStartProgress,
-                totalDragY = totalDragY,
-                snapDistance = snapDistance,
+        val change = awaitCardDragChange(down) ?: break
+        if (!updateCardDrag(
+                state = dragState,
+                change = change,
+                velocityTracker = velocityTracker,
                 maxStep = maxStep,
+                snapDistance = snapDistance,
+                motionScope = motionScope,
+                stepProgress = stepProgress,
+                settleDirection = settleDirection,
             )
-            dragSnapJob?.cancel()
-            dragSnapJob = motionScope.launch {
-                stepProgress.snapTo(latestDraggedStep)
-            }
-        }
+        ) break
     }
 
-    dragSnapJob?.cancel()
-    return if (isDraggingCard) {
+    return finishCardDrag(
+        state = dragState,
+        velocityTracker = velocityTracker,
+    )
+}
+
+private class CardDragState(
+    val hitCardBody: Boolean,
+    val gestureStartStep: Int,
+    val gestureStartProgress: Float,
+) {
+    var totalDragY: Float = 0f
+    var isDragging: Boolean = false
+    var latestDraggedStep: Float = gestureStartProgress
+    var snapJob: Job? = null
+}
+
+private suspend fun AwaitPointerEventScope.awaitCardDragChange(
+    down: PointerInputChange,
+): PointerInputChange? {
+    val event = awaitPointerEvent()
+    val change = event.changes.firstOrNull { it.id == down.id } ?: return null
+    return change.takeIf { it.pressed }
+}
+
+private fun AwaitPointerEventScope.updateCardDrag(
+    state: CardDragState,
+    change: PointerInputChange,
+    velocityTracker: VelocityTracker,
+    maxStep: Int,
+    snapDistance: Float,
+    motionScope: CoroutineScope,
+    stepProgress: Animatable<Float, AnimationVector1D>,
+    settleDirection: MutableFloatState,
+): Boolean {
+    state.totalDragY += change.positionChange().y
+    velocityTracker.addPosition(change.uptimeMillis, change.position)
+    if (!state.isDragging && abs(state.totalDragY) >= viewConfiguration.touchSlop) {
+        if (!state.canStart(maxStep)) {
+            change.consume()
+            return false
+        }
+        state.isDragging = true
+    }
+
+    if (state.isDragging) {
+        snapCardDragProgress(
+            state = state,
+            change = change,
+            maxStep = maxStep,
+            snapDistance = snapDistance,
+            motionScope = motionScope,
+            stepProgress = stepProgress,
+            settleDirection = settleDirection,
+        )
+    }
+    return true
+}
+
+private fun CardDragState.canStart(maxStep: Int): Boolean =
+    canStartCardDrag(
+        totalDragY = totalDragY,
+        hitCardBody = hitCardBody,
+        gestureStartStep = gestureStartStep,
+        maxStep = maxStep,
+    )
+
+private fun snapCardDragProgress(
+    state: CardDragState,
+    change: PointerInputChange,
+    maxStep: Int,
+    snapDistance: Float,
+    motionScope: CoroutineScope,
+    stepProgress: Animatable<Float, AnimationVector1D>,
+    settleDirection: MutableFloatState,
+) {
+    change.consume()
+    settleDirection.floatValue = 0f
+    state.latestDraggedStep = draggedStep(
+        gestureStartProgress = state.gestureStartProgress,
+        totalDragY = state.totalDragY,
+        snapDistance = snapDistance,
+        maxStep = maxStep,
+    )
+    state.snapJob?.cancel()
+    state.snapJob = motionScope.launch {
+        stepProgress.snapTo(state.latestDraggedStep)
+    }
+}
+
+private fun finishCardDrag(
+    state: CardDragState,
+    velocityTracker: VelocityTracker,
+): CardDragResult? {
+    state.snapJob?.cancel()
+    return if (state.isDragging) {
         CardDragResult(
-            latestDraggedStep = latestDraggedStep,
+            latestDraggedStep = state.latestDraggedStep,
             velocityY = velocityTracker.calculateVelocity().y,
         )
     } else {
@@ -1366,7 +1711,16 @@ private fun InterpolatedPlanetCardStack(
     settlePhaseProvider: () -> Float = { 1f },
     settleDirectionProvider: () -> Float = { 0f },
 ) {
-    val density = LocalDensity.current
+    val renderContext = PlanetStackRenderContext(
+        lastIndex = planets.lastIndex,
+        count = planets.size,
+        boostedIndex = visibleCardRange.last.coerceAtMost(planets.lastIndex),
+        styleProgress = styleStackProgress,
+        stepProgressProvider = stepProgressProvider,
+        activeCardIndexProvider = activeCardIndexProvider,
+        settlePhaseProvider = settlePhaseProvider,
+        settleDirectionProvider = settleDirectionProvider,
+    )
 
     Box(
         modifier = modifier
@@ -1376,56 +1730,93 @@ private fun InterpolatedPlanetCardStack(
     ) {
         visibleCardRange.forEach { index ->
             val planet = planets.getOrNull(index) ?: return@forEach
-            key(planet.id) {
-                val zIndex = stackZIndex(
-                    index = index,
-                    boostedIndex = visibleCardRange.last.coerceAtMost(planets.lastIndex),
-                    stackProgress = styleStackProgress,
-                )
-                PlanetInfoCard(
-                    model = planet,
-                    frameProvider = {
-                        interpolateCardFrame(
-                            index = index,
-                            stepProgress = stepProgressProvider(),
-                            lastIndex = planets.lastIndex,
-                        )
-                    },
-                    modifier = Modifier
-                        .zIndex(zIndex)
-                        .align(Alignment.TopStart)
-                        .graphicsLayer {
-                            clip = false
-                            val stepProgress = stepProgressProvider()
-                            val activeIndex = activeCardIndexProvider()
-                            val frame = interpolateCardFrame(
-                                index = index,
-                                stepProgress = stepProgress,
-                                lastIndex = planets.lastIndex,
-                            )
-                            val settleTranslationY = cardSettleTranslationY(
-                                index = index,
-                                activeIndex = activeIndex,
-                                phase = settlePhaseProvider(),
-                                direction = settleDirectionProvider(),
-                            )
-                            val floatingScale = cardFloatingScale(
-                                index = index,
-                                activeIndex = activeIndex,
-                                stepProgress = stepProgress,
-                                cardCount = planets.size,
-                            )
-                            translationY = with(density) {
-                                frame.offsetY.toPx() + settleTranslationY.toPx()
-                            }
-                            scaleX = floatingScale
-                            scaleY = floatingScale
-                        },
-                )
-            }
+            StackedPlanetCard(
+                index = index,
+                planet = planet,
+                context = renderContext,
+            )
         }
     }
 }
+
+private class PlanetStackRenderContext(
+    val lastIndex: Int,
+    val count: Int,
+    val boostedIndex: Int,
+    val styleProgress: Float,
+    val stepProgressProvider: () -> Float,
+    val activeCardIndexProvider: () -> Int,
+    val settlePhaseProvider: () -> Float,
+    val settleDirectionProvider: () -> Float,
+)
+
+@Composable
+private fun BoxScope.StackedPlanetCard(
+    index: Int,
+    planet: PlanetCardModel,
+    context: PlanetStackRenderContext,
+) {
+    val density = LocalDensity.current
+    key(planet.id) {
+        PlanetInfoCard(
+            model = planet,
+            frameProvider = { stackedCardFrame(index, context) },
+            modifier = Modifier
+                .zIndex(
+                    stackZIndex(
+                        index = index,
+                        boostedIndex = context.boostedIndex,
+                        stackProgress = context.styleProgress,
+                    ),
+                )
+                .align(Alignment.TopStart)
+                .graphicsLayer {
+                    applyStackedCardMotion(
+                        index = index,
+                        context = context,
+                        density = density,
+                    )
+                },
+        )
+    }
+}
+
+private fun GraphicsLayerScope.applyStackedCardMotion(
+    index: Int,
+    context: PlanetStackRenderContext,
+    density: Density,
+) {
+    clip = false
+    val stepProgress = context.stepProgressProvider()
+    val activeIndex = context.activeCardIndexProvider()
+    val settleTranslationY = cardSettleTranslationY(
+        index = index,
+        activeIndex = activeIndex,
+        phase = context.settlePhaseProvider(),
+        direction = context.settleDirectionProvider(),
+    )
+    translationY = with(density) {
+        stackedCardFrame(index, context).offsetY.toPx() + settleTranslationY.toPx()
+    }
+    val scale = cardFloatingScale(
+        index = index,
+        activeIndex = activeIndex,
+        stepProgress = stepProgress,
+        cardCount = context.count,
+    )
+    scaleX = scale
+    scaleY = scale
+}
+
+private fun stackedCardFrame(
+    index: Int,
+    context: PlanetStackRenderContext,
+): CardFrame =
+    interpolateCardFrame(
+        index = index,
+        stepProgress = context.stepProgressProvider(),
+        lastIndex = context.lastIndex,
+    )
 
 @Composable
 private fun PlanetInfoCard(
@@ -1433,8 +1824,6 @@ private fun PlanetInfoCard(
     modifier: Modifier = Modifier,
     frameProvider: () -> CardFrame,
 ) {
-    val density = LocalDensity.current
-
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
@@ -1442,51 +1831,81 @@ private fun PlanetInfoCard(
             .height(CardHeight),
     ) {
         PlanetCardBackground(frameProvider = frameProvider)
-
-        PlanetImage(
+        PlanetCardPlanetImage(
             model = model,
-            alphaProvider = {
-                val frame = frameProvider()
-                frame.planetAlpha * frame.cardAlpha
-            },
-            translationYProvider = {
-                with(density) {
-                    (frameProvider().planetOffsetY - PlanetImageOffsetY).toPx()
-                }
-            },
-            modifier = Modifier
-                .zIndex(1f)
-                .align(Alignment.TopStart)
-                .offset(
-                    x = 15.5.dp,
-                    y = PlanetImageOffsetY,
-                ),
+            frameProvider = frameProvider,
         )
-
         PlanetCardHeader(
             model = model,
             frameProvider = frameProvider,
         )
-
-        PlanetStatsGrid(
+        PlanetCardStats(
             model = model,
-            modifier = Modifier
-                .zIndex(2f)
-                .graphicsLayer {
-                    val frame = frameProvider()
-                    alpha = frame.statsAlpha * frame.cardAlpha
-                },
+            frameProvider = frameProvider,
         )
-
-        PlanetCardTitle(
+        PlanetCardElevatedTitle(
             text = model.name,
-            alphaProvider = {
-                val frame = frameProvider()
-                frame.elevatedTitleAlpha * frame.cardAlpha
-            },
-            modifier = Modifier.zIndex(3f),
+            frameProvider = frameProvider,
         )
     }
+}
+
+@Composable
+private fun BoxScope.PlanetCardPlanetImage(
+    model: PlanetCardModel,
+    frameProvider: () -> CardFrame,
+) {
+    val density = LocalDensity.current
+    PlanetImage(
+        model = model,
+        alphaProvider = {
+            val frame = frameProvider()
+            frame.planetAlpha * frame.cardAlpha
+        },
+        translationYProvider = {
+            with(density) {
+                (frameProvider().planetOffsetY - PlanetImageOffsetY).toPx()
+            }
+        },
+        modifier = Modifier
+            .zIndex(1f)
+            .align(Alignment.TopStart)
+            .offset(
+                x = 15.5.dp,
+                y = PlanetImageOffsetY,
+            ),
+    )
+}
+
+@Composable
+private fun PlanetCardStats(
+    model: PlanetCardModel,
+    frameProvider: () -> CardFrame,
+) {
+    PlanetStatsGrid(
+        model = model,
+        modifier = Modifier
+            .zIndex(2f)
+            .graphicsLayer {
+                val frame = frameProvider()
+                alpha = frame.statsAlpha * frame.cardAlpha
+            },
+    )
+}
+
+@Composable
+private fun PlanetCardElevatedTitle(
+    text: String,
+    frameProvider: () -> CardFrame,
+) {
+    PlanetCardTitle(
+        text = text,
+        alphaProvider = {
+            val frame = frameProvider()
+            frame.elevatedTitleAlpha * frame.cardAlpha
+        },
+        modifier = Modifier.zIndex(3f),
+    )
 }
 
 @Composable
@@ -1805,16 +2224,15 @@ private fun cardFrameAtStep(
     val activeRelativeSlot = activeStep - stackStartIndex
     val slot = index - stackStartIndex
     return when {
-        activeStep <= StackStepFrames.lastIndex && index in 0..StackStepFrames.lastIndex ->
+        activeStep <= StackStepFrames.lastIndex && index in StackStepFrames.indices ->
             StackStepFrames[activeSlot][index]
         slot < 0 -> hiddenStackCardFrame(slot)
         slot < activeRelativeSlot -> stackedOverflowCardFrame(slot)
         slot == activeRelativeSlot -> keyframe(overflowStackOffset(slot), peekSolidFront())
-        slot > activeRelativeSlot -> futureCardFrame(
+        else -> futureCardFrame(
             slot = slot,
             activeSlot = activeRelativeSlot,
         )
-        else -> StackStepFrames.last()[0]
     }
 }
 
