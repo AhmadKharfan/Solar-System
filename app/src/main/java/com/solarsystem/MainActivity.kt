@@ -57,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -1108,7 +1107,7 @@ private fun SwipeHintContent() {
 
 @Composable
 private fun AnimatedSwipeArrows() {
-    val phase by rememberInfiniteTransition(label = "SwipeArrowWave").animateFloat(
+    val phase = rememberInfiniteTransition(label = "SwipeArrowWave").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -1126,13 +1125,18 @@ private fun AnimatedSwipeArrows() {
         verticalArrangement = Arrangement.spacedBy((-4).dp),
     ) {
         repeat(SwipeArrowCount) { index ->
+            val arrowAlphaProvider = remember(index, phase) {
+                {
+                    swipeArrowWaveAlpha(
+                        index = index,
+                        phase = phase.value,
+                    )
+                }
+            }
             SwipeArrowLayer(
                 res = SwipeArrowIcon,
                 glowColor = SolarColors.SwipeHintArrowGlow,
-                alpha = swipeArrowWaveAlpha(
-                    index = index,
-                    phase = phase,
-                ),
+                alphaProvider = arrowAlphaProvider,
             )
         }
     }
@@ -1143,10 +1147,9 @@ private fun SwipeArrowLayer(
     @DrawableRes res: Int,
     modifier: Modifier = Modifier,
     glowColor: Color,
-    alpha: Float = 1f,
+    alphaProvider: () -> Float = { 1f },
 ) {
     val usesBlurShadow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val arrowAlpha = alpha.coerceIn(0f, 1f)
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
@@ -1155,19 +1158,23 @@ private fun SwipeArrowLayer(
                 if (usesBlurShadow) {
                     Modifier
                 } else {
-                    Modifier.arrowDropShadow(glowColor.withMultipliedAlpha(arrowAlpha))
+                    Modifier.arrowDropShadow(
+                        glowColor = glowColor,
+                        alphaProvider = alphaProvider,
+                    )
                 },
             ),
     ) {
         if (usesBlurShadow) {
             SwipeArrowBlurShadow(
                 res = res,
-                glowColor = glowColor.withMultipliedAlpha(arrowAlpha),
+                glowColor = glowColor,
+                alphaProvider = alphaProvider,
             )
         }
         SwipeArrowImage(
             res = res,
-            alpha = arrowAlpha,
+            alphaProvider = alphaProvider,
         )
     }
 }
@@ -1176,6 +1183,7 @@ private fun SwipeArrowLayer(
 private fun SwipeArrowBlurShadow(
     @DrawableRes res: Int,
     glowColor: Color,
+    alphaProvider: () -> Float,
 ) {
     Image(
         painter = painterResource(res),
@@ -1185,7 +1193,9 @@ private fun SwipeArrowBlurShadow(
             .fillMaxSize()
             .offset(y = SwipeArrowShadowOffsetY)
             .blur(SwipeArrowShadowBlur)
-            .alpha(glowColor.alpha),
+            .graphicsLayer {
+                alpha = glowColor.alpha * alphaProvider().coerceIn(0f, 1f)
+            },
         contentScale = ContentScale.Fit,
     )
 }
@@ -1193,7 +1203,7 @@ private fun SwipeArrowBlurShadow(
 @Composable
 private fun SwipeArrowImage(
     @DrawableRes res: Int,
-    alpha: Float,
+    alphaProvider: () -> Float,
 ) {
     Image(
         painter = painterResource(res),
@@ -1201,7 +1211,7 @@ private fun SwipeArrowImage(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
-                this.alpha = alpha
+                alpha = alphaProvider().coerceIn(0f, 1f)
             },
         contentScale = ContentScale.Fit,
     )
@@ -2630,7 +2640,11 @@ private fun Modifier.planetShadow(
 private fun Color.withMultipliedAlpha(alphaMultiplier: Float): Color =
     copy(alpha = alpha * alphaMultiplier.coerceIn(0f, 1f))
 
-private fun Modifier.arrowDropShadow(glowColor: Color): Modifier = drawBehind {
+private fun Modifier.arrowDropShadow(
+    glowColor: Color,
+    alphaProvider: () -> Float = { 1f },
+): Modifier = drawBehind {
+    val glow = glowColor.withMultipliedAlpha(alphaProvider().coerceIn(0f, 1f))
     val blurPx = SwipeArrowShadowBlur.toPx()
     val offsetY = SwipeArrowShadowOffsetY.toPx()
     val insetTop = size.height * 0.3308f
@@ -2646,8 +2660,8 @@ private fun Modifier.arrowDropShadow(glowColor: Color): Modifier = drawBehind {
     drawOval(
         brush = Brush.radialGradient(
             colorStops = arrayOf(
-                0f to glowColor.copy(alpha = glowColor.alpha * 0.55f),
-                0.65f to glowColor.copy(alpha = glowColor.alpha * 0.2f),
+                0f to glow.copy(alpha = glow.alpha * 0.55f),
+                0.65f to glow.copy(alpha = glow.alpha * 0.2f),
                 1f to Color.Transparent,
             ),
             center = Offset(centerX, centerY),
