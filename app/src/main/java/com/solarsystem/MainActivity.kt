@@ -446,14 +446,14 @@ private fun SolarSystemScreen(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val anchoredProgress = remember { Animatable(0f) }
-    var cardsAtFirstStep by remember { mutableStateOf(true) }
+    val cardsAtFirstStep = remember { mutableStateOf(true) }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .graphicsLayer { clip = false }
             .screenMotionDrag(
-                cardsAtFirstStep = cardsAtFirstStep,
+                cardsAtFirstStepProvider = { cardsAtFirstStep.value },
                 density = density,
                 scope = scope,
                 anchoredProgress = anchoredProgress,
@@ -461,24 +461,24 @@ private fun SolarSystemScreen(modifier: Modifier = Modifier) {
     ) {
         SolarMotionScene(
             progressProvider = { anchoredProgress.value },
-            onCardsAtFirstStepChanged = { cardsAtFirstStep = it },
+            onCardsAtFirstStepChanged = { cardsAtFirstStep.value = it },
         )
     }
 }
 
 private fun Modifier.screenMotionDrag(
-    cardsAtFirstStep: Boolean,
+    cardsAtFirstStepProvider: () -> Boolean,
     density: Density,
     scope: CoroutineScope,
     anchoredProgress: Animatable<Float, AnimationVector1D>,
-): Modifier = pointerInput(cardsAtFirstStep, density) {
+): Modifier = pointerInput(density) {
     val dragRangePx = with(density) { 770.dp.toPx() }.coerceAtLeast(1f)
     val swipeVelocityThresholdPx = with(density) { 850.dp.toPx() }
     val cardSectionTopPx = with(density) { 330.dp.toPx() }
 
     awaitEachGesture {
         handleScreenMotionGesture(
-            cardsAtFirstStep = cardsAtFirstStep,
+            cardsAtFirstStepProvider = cardsAtFirstStepProvider,
             dragRangePx = dragRangePx,
             swipeVelocityThresholdPx = swipeVelocityThresholdPx,
             cardSectionTopPx = cardSectionTopPx,
@@ -489,7 +489,7 @@ private fun Modifier.screenMotionDrag(
 }
 
 private suspend fun AwaitPointerEventScope.handleScreenMotionGesture(
-    cardsAtFirstStep: Boolean,
+    cardsAtFirstStepProvider: () -> Boolean,
     dragRangePx: Float,
     swipeVelocityThresholdPx: Float,
     cardSectionTopPx: Float,
@@ -503,7 +503,7 @@ private suspend fun AwaitPointerEventScope.handleScreenMotionGesture(
     val dragResult = trackScreenMotionDrag(
         down = down,
         velocityTracker = velocityTracker,
-        cardsAtFirstStep = cardsAtFirstStep,
+        cardsAtFirstStepProvider = cardsAtFirstStepProvider,
         dragRangePx = dragRangePx,
         cardSectionTopPx = cardSectionTopPx,
         scope = scope,
@@ -527,7 +527,7 @@ private data class ScreenMotionDragResult(
 private suspend fun AwaitPointerEventScope.trackScreenMotionDrag(
     down: PointerInputChange,
     velocityTracker: VelocityTracker,
-    cardsAtFirstStep: Boolean,
+    cardsAtFirstStepProvider: () -> Boolean,
     dragRangePx: Float,
     cardSectionTopPx: Float,
     scope: CoroutineScope,
@@ -544,7 +544,7 @@ private suspend fun AwaitPointerEventScope.trackScreenMotionDrag(
             state = dragState,
             change = change,
             velocityTracker = velocityTracker,
-            cardsAtFirstStep = cardsAtFirstStep,
+            cardsAtFirstStep = cardsAtFirstStepProvider(),
             dragRangePx = dragRangePx,
             scope = scope,
             anchoredProgress = anchoredProgress,
@@ -1231,7 +1231,6 @@ private fun ScrollableInterpolatedPlanetCardStack(
     val density = LocalDensity.current
     val motionScope = rememberCoroutineScope()
     val stackState = rememberPlanetCardStackState(planets)
-    val activeStep by rememberActiveStackStep(stackState)
     val visibleCardRange by rememberVisibleCardRange(stackState, planets)
 
     ReportFirstStackStep(
@@ -1242,7 +1241,6 @@ private fun ScrollableInterpolatedPlanetCardStack(
     PlanetCardStackContainer(
         entranceStackProgressProvider = entranceStackProgressProvider,
         planets = planets,
-        activeStep = activeStep,
         visibleCardRange = visibleCardRange,
         density = density,
         motionScope = motionScope,
@@ -1311,16 +1309,6 @@ private fun rememberPlanetCardStackState(
 }
 
 @Composable
-private fun rememberActiveStackStep(
-    stackState: PlanetCardStackState,
-): State<Int> =
-    remember(stackState.maxStep) {
-        derivedStateOf {
-            stackState.stepProgress.value.roundToInt().coerceIn(0, stackState.maxStep)
-        }
-    }
-
-@Composable
 private fun rememberVisibleCardRange(
     stackState: PlanetCardStackState,
     planets: List<PlanetCardModel>,
@@ -1352,7 +1340,6 @@ private fun ReportFirstStackStep(
 private fun PlanetCardStackContainer(
     entranceStackProgressProvider: () -> Float,
     planets: List<PlanetCardModel>,
-    activeStep: Int,
     visibleCardRange: IntRange,
     density: Density,
     motionScope: CoroutineScope,
@@ -1373,11 +1360,10 @@ private fun PlanetCardStackContainer(
         InterpolatedPlanetCardStack(
             stepProgressProvider = { stackState.stepProgress.value },
             activeCardIndexProvider = {
-                activeStep.coerceIn(0, planets.lastIndex)
+                stackState.stepProgress.value.roundToInt().coerceIn(0, planets.lastIndex)
             },
             settlePhaseProvider = { stackState.cardSettlePhase.value },
             settleDirectionProvider = { stackState.settleDirection.floatValue },
-            styleStackProgress = stackStyleProgress(activeStep),
             visibleCardRange = visibleCardRange,
             planets = planets,
             modifier = Modifier
@@ -1751,7 +1737,6 @@ private fun dragStepDirection(totalDragY: Float) = when {
 @Composable
 private fun InterpolatedPlanetCardStack(
     stepProgressProvider: () -> Float,
-    styleStackProgress: Float,
     visibleCardRange: IntRange,
     modifier: Modifier = Modifier,
     planets: List<PlanetCardModel> = PlanetCatalog.all,
@@ -1763,7 +1748,6 @@ private fun InterpolatedPlanetCardStack(
         lastIndex = planets.lastIndex,
         count = planets.size,
         boostedIndex = visibleCardRange.last.coerceAtMost(planets.lastIndex),
-        styleProgress = styleStackProgress,
         stepProgressProvider = stepProgressProvider,
         activeCardIndexProvider = activeCardIndexProvider,
         settlePhaseProvider = settlePhaseProvider,
@@ -1791,7 +1775,6 @@ private class PlanetStackRenderContext(
     val lastIndex: Int,
     val count: Int,
     val boostedIndex: Int,
-    val styleProgress: Float,
     val stepProgressProvider: () -> Float,
     val activeCardIndexProvider: () -> Int,
     val settlePhaseProvider: () -> Float,
@@ -1814,7 +1797,6 @@ private fun BoxScope.StackedPlanetCard(
                     stackZIndex(
                         index = index,
                         boostedIndex = context.boostedIndex,
-                        stackProgress = context.styleProgress,
                     ),
                 )
                 .align(Alignment.TopStart)
@@ -2364,9 +2346,6 @@ private fun visibleCardRange(
     return startIndex..endIndex
 }
 
-private fun stackStyleProgress(activeStep: Int): Float =
-    1f - (activeStep.coerceIn(0, StackStepFrames.lastIndex) / StackStepFrames.lastIndex.toFloat())
-
 private fun defaultStackLayers(): List<CardFrame> {
     val pitch = CardHeight + CardListGap
     return List(VisibleStackSlots) { index -> keyframe(pitch * index) }
@@ -2480,10 +2459,8 @@ private fun Density.isCardBodyHit(
 private fun stackZIndex(
     index: Int,
     boostedIndex: Int,
-    stackProgress: Float,
 ): Float {
-    val stackedAmount = 1f - stackProgress.coerceIn(0f, 1f)
-    val lastCardBoost = if (index == boostedIndex && stackedAmount > 0.82f) 100f else 0f
+    val lastCardBoost = if (index == boostedIndex) 100f else 0f
     return index.toFloat() + lastCardBoost
 }
 
