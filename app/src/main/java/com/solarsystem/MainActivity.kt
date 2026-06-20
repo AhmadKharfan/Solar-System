@@ -299,7 +299,7 @@ private val EarthShadowBleed = 62.dp
 private const val VisibleStackSlots = 7
 private const val MaxStackedCardsBeforeActive = 10
 private const val VisibleCardsAfterActive = 20
-private const val EarthShadowAlpha = 0.25f
+private const val EarthShadowAlpha = 0.20f
 
 private const val PeekPlanetAlpha = 0.32f
 
@@ -2570,7 +2570,7 @@ private fun Modifier.earthFigmaDropShadow(
     drawEarthShadow(
         discDiameterPx = discDiameterPx,
         shadowAlpha = shadowAlphaProvider(),
-        blurPx = 50.dp.toPx(),
+        blurPx = 44.dp.toPx(),
         center = center,
     )
 }
@@ -2603,7 +2603,7 @@ private fun Modifier.planetShadow(
     alphaProvider: () -> Float = { 1f },
 ): Modifier = drawBehind {
     val glowAlpha = alphaProvider().coerceIn(0f, 1f)
-    val blurPx = 100.dp.toPx()
+    val blurPx = 82.dp.toPx()
     val planetRadiusPx = minOf(planetWidth.toPx(), planetHeight.toPx()) / 2f
     val glowRadius = planetRadiusPx + blurPx
     val center = Offset(size.width / 2f, size.height / 2f)
@@ -2614,9 +2614,9 @@ private fun Modifier.planetShadow(
             colorStops = arrayOf(
                 0f to Color.Transparent,
                 (edgeStop * 0.72f) to Color.Transparent,
-                (edgeStop * 0.92f) to glowColor.copy(alpha = glowColor.alpha * 0.55f * glowAlpha),
-                (edgeStop * 1.18f) to glowColor.copy(alpha = glowColor.alpha * 0.28f * glowAlpha),
-                (edgeStop * 1.55f) to glowColor.copy(alpha = glowColor.alpha * 0.08f * glowAlpha),
+                (edgeStop * 0.92f) to glowColor.copy(alpha = glowColor.alpha * 0.42f * glowAlpha),
+                (edgeStop * 1.18f) to glowColor.copy(alpha = glowColor.alpha * 0.20f * glowAlpha),
+                (edgeStop * 1.55f) to glowColor.copy(alpha = glowColor.alpha * 0.06f * glowAlpha),
                 1f to Color.Transparent,
             ),
             center = center,
