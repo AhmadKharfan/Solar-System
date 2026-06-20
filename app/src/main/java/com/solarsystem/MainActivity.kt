@@ -292,6 +292,8 @@ private val CardListGap = 32.dp
 private val TextLayerBleed = 14.dp
 private val EarthShadowBleed = 62.dp
 private const val VisibleStackSlots = 7
+private const val MaxStackedCardsBeforeActive = 10
+private const val VisibleCardsAfterActive = 20
 private const val EarthShadowAlpha = 0.25f
 
 private const val PeekPlanetAlpha = 0.32f
@@ -312,6 +314,7 @@ private data class PlanetStat(
 
 @Immutable
 private data class PlanetCardModel(
+    val id: Int,
     val name: String,
     val tagline: String,
     @param:DrawableRes val imageRes: Int,
@@ -323,6 +326,7 @@ private data class PlanetCardModel(
 @Immutable
 private data class CardFrame(
     val offsetY: Dp = 0.dp,
+    val cardAlpha: Float = 1f,
     val backgroundColor: Color = SolarColors.CardBackground,
     val planetAlpha: Float = 1f,
     val planetOffsetY: Dp = PlanetImageOffsetY,
@@ -335,6 +339,7 @@ private data class CardFrame(
 private object PlanetCatalog {
     val all = listOf(
         PlanetCardModel(
+            id = 1,
             name = "Saturn",
             tagline = "The Ring Master",
             imageRes = R.drawable.img_saturn,
@@ -348,6 +353,7 @@ private object PlanetCatalog {
             ),
         ),
         PlanetCardModel(
+            id = 2,
             name = "Mars",
             tagline = "The next colony",
             imageRes = R.drawable.img_mars,
@@ -360,6 +366,7 @@ private object PlanetCatalog {
             ),
         ),
         PlanetCardModel(
+            id = 3,
             name = "Mercury",
             tagline = "The Fastest Planet",
             imageRes = R.drawable.img_mercury,
@@ -372,6 +379,7 @@ private object PlanetCatalog {
             ),
         ),
         PlanetCardModel(
+            id = 4,
             name = "Venus",
             tagline = "The Toxic Beauty",
             imageRes = R.drawable.img_venus,
@@ -384,6 +392,7 @@ private object PlanetCatalog {
             ),
         ),
         PlanetCardModel(
+            id = 5,
             name = "Jupiter",
             tagline = "The Heavy Giant",
             imageRes = R.drawable.img_jupiter,
@@ -396,6 +405,7 @@ private object PlanetCatalog {
             ),
         ),
         PlanetCardModel(
+            id = 6,
             name = "Uranus",
             tagline = "The Lazy Iceberg",
             imageRes = R.drawable.img_uranus,
@@ -408,6 +418,7 @@ private object PlanetCatalog {
             ),
         ),
         PlanetCardModel(
+            id = 7,
             name = "Neptune",
             tagline = "The Windy World",
             imageRes = R.drawable.img_neptune,
@@ -1365,7 +1376,7 @@ private fun InterpolatedPlanetCardStack(
     ) {
         visibleCardRange.forEach { index ->
             val planet = planets.getOrNull(index) ?: return@forEach
-            key(planet.name) {
+            key(planet.id) {
                 val zIndex = stackZIndex(
                     index = index,
                     boostedIndex = visibleCardRange.last.coerceAtMost(planets.lastIndex),
@@ -1387,6 +1398,11 @@ private fun InterpolatedPlanetCardStack(
                             clip = false
                             val stepProgress = stepProgressProvider()
                             val activeIndex = activeCardIndexProvider()
+                            val frame = interpolateCardFrame(
+                                index = index,
+                                stepProgress = stepProgress,
+                                lastIndex = planets.lastIndex,
+                            )
                             val settleTranslationY = cardSettleTranslationY(
                                 index = index,
                                 activeIndex = activeIndex,
@@ -1400,12 +1416,8 @@ private fun InterpolatedPlanetCardStack(
                                 cardCount = planets.size,
                             )
                             translationY = with(density) {
-                                interpolateCardFrame(
-                                    index = index,
-                                    stepProgress = stepProgress,
-                                    lastIndex = planets.lastIndex,
-                                ).offsetY.toPx()
-                            } + with(density) { settleTranslationY.toPx() }
+                                frame.offsetY.toPx() + settleTranslationY.toPx()
+                            }
                             scaleX = floatingScale
                             scaleY = floatingScale
                         },
@@ -1433,7 +1445,10 @@ private fun PlanetInfoCard(
 
         PlanetImage(
             model = model,
-            alphaProvider = { frameProvider().planetAlpha },
+            alphaProvider = {
+                val frame = frameProvider()
+                frame.planetAlpha * frame.cardAlpha
+            },
             translationYProvider = {
                 with(density) {
                     (frameProvider().planetOffsetY - PlanetImageOffsetY).toPx()
@@ -1458,13 +1473,17 @@ private fun PlanetInfoCard(
             modifier = Modifier
                 .zIndex(2f)
                 .graphicsLayer {
-                    alpha = frameProvider().statsAlpha
+                    val frame = frameProvider()
+                    alpha = frame.statsAlpha * frame.cardAlpha
                 },
         )
 
         PlanetCardTitle(
             text = model.name,
-            alphaProvider = { frameProvider().elevatedTitleAlpha },
+            alphaProvider = {
+                val frame = frameProvider()
+                frame.elevatedTitleAlpha * frame.cardAlpha
+            },
             modifier = Modifier.zIndex(3f),
         )
     }
@@ -1476,14 +1495,15 @@ private fun BoxScope.PlanetCardBackground(frameProvider: () -> CardFrame) {
         modifier = Modifier
             .matchParentSize()
             .drawBehind {
+                val frame = frameProvider()
                 val radius = 20.dp.toPx()
                 val strokeWidth = CardBorderWidth.toPx()
                 drawRoundRect(
-                    color = frameProvider().backgroundColor,
+                    color = frame.backgroundColor.withMultipliedAlpha(frame.cardAlpha),
                     cornerRadius = CornerRadius(radius, radius),
                 )
                 drawRoundRect(
-                    color = SolarColors.CardBorder,
+                    color = SolarColors.CardBorder.withMultipliedAlpha(frame.cardAlpha),
                     cornerRadius = CornerRadius(radius, radius),
                     style = Stroke(width = strokeWidth),
                 )
@@ -1509,6 +1529,7 @@ private fun PlanetImage(
                 glowColor = model.glowColor,
                 planetWidth = PlanetImageWidth,
                 planetHeight = model.imageHeight,
+                alphaProvider = alphaProvider ?: { 1f },
             ),
     ) {
         Image(
@@ -1533,14 +1554,20 @@ private fun PlanetCardHeader(
     FadingTextLayer(
         text = model.name,
         style = SolarTypography.CardTitle,
-        alphaProvider = { frameProvider().titleAlpha },
+        alphaProvider = {
+            val frame = frameProvider()
+            frame.titleAlpha * frame.cardAlpha
+        },
         y = CardTitleY,
         modifier = Modifier.zIndex(2f),
     )
     FadingTextLayer(
         text = model.tagline,
         style = SolarTypography.CardSubtitle,
-        alphaProvider = { frameProvider().taglineAlpha },
+        alphaProvider = {
+            val frame = frameProvider()
+            frame.taglineAlpha * frame.cardAlpha
+        },
         y = 40.5.dp,
         modifier = Modifier.zIndex(2f),
     )
@@ -1756,6 +1783,7 @@ private fun interpolateCardFrame(
     val end = cardFrameAtStep(index, toStep, lastIndex)
     return CardFrame(
         offsetY = interpolate(start.offsetY, end.offsetY, segment),
+        cardAlpha = interpolate(start.cardAlpha, end.cardAlpha, segment),
         backgroundColor = interpolateColor(start.backgroundColor, end.backgroundColor, segment),
         planetAlpha = interpolate(start.planetAlpha, end.planetAlpha, segment),
         planetOffsetY = interpolate(start.planetOffsetY, end.planetOffsetY, segment),
@@ -1773,15 +1801,18 @@ private fun cardFrameAtStep(
 ): CardFrame {
     val activeStep = step.coerceIn(0, lastIndex.coerceAtLeast(0))
     val activeSlot = activeStep.coerceAtMost(StackStepFrames.lastIndex)
-    val slot = index
+    val stackStartIndex = stackStartIndex(activeStep)
+    val activeRelativeSlot = activeStep - stackStartIndex
+    val slot = index - stackStartIndex
     return when {
-        activeStep <= StackStepFrames.lastIndex && slot in 0..StackStepFrames.lastIndex ->
-            StackStepFrames[activeSlot][slot]
-        slot < activeStep -> stackedOverflowCardFrame(slot)
-        slot == activeStep -> keyframe(overflowStackOffset(slot), peekSolidFront())
-        slot > activeStep -> futureCardFrame(
+        activeStep <= StackStepFrames.lastIndex && index in 0..StackStepFrames.lastIndex ->
+            StackStepFrames[activeSlot][index]
+        slot < 0 -> hiddenStackCardFrame(slot)
+        slot < activeRelativeSlot -> stackedOverflowCardFrame(slot)
+        slot == activeRelativeSlot -> keyframe(overflowStackOffset(slot), peekSolidFront())
+        slot > activeRelativeSlot -> futureCardFrame(
             slot = slot,
-            activeStep = activeStep,
+            activeSlot = activeRelativeSlot,
         )
         else -> StackStepFrames.last()[0]
     }
@@ -1800,17 +1831,34 @@ private fun stackedOverflowCardFrame(slot: Int): CardFrame =
         },
     )
 
+private fun hiddenStackCardFrame(slot: Int): CardFrame =
+    keyframe(
+        offsetY = overflowStackOffset(slot),
+        frame = CardFrame(
+            cardAlpha = 0f,
+            backgroundColor = SolarColors.CardBackgroundSolid,
+            planetAlpha = PeekPlanetAlpha,
+            titleAlpha = 0f,
+            taglineAlpha = 0f,
+            statsAlpha = 0f,
+            elevatedTitleAlpha = 0f,
+        ),
+    )
+
 private fun futureCardFrame(
     slot: Int,
-    activeStep: Int,
+    activeSlot: Int,
 ): CardFrame {
-    val activeOffset = overflowStackOffset(activeStep)
-    val distanceFromActive = slot - activeStep
+    val activeOffset = overflowStackOffset(activeSlot)
+    val distanceFromActive = slot - activeSlot
     return keyframe(activeOffset + (CardHeight + CardListGap) * distanceFromActive)
 }
 
 private fun overflowStackOffset(slot: Int): Dp =
     14.dp * slot
+
+private fun stackStartIndex(activeStep: Int): Int =
+    (activeStep - MaxStackedCardsBeforeActive).coerceAtLeast(0)
 
 private fun visibleCardRange(
     stepProgress: Float,
@@ -1818,10 +1866,10 @@ private fun visibleCardRange(
 ): IntRange {
     if (lastIndex < 0) return IntRange.EMPTY
 
-    val fromStep = floor(stepProgress.coerceAtLeast(0f)).toInt().coerceAtMost(lastIndex)
-    val toStep = (fromStep + 1).coerceAtMost(lastIndex)
-    val last = maxOf(VisibleStackSlots - 1, toStep + 1).coerceAtMost(lastIndex)
-    return 0..last
+    val activeIndex = floor(stepProgress.coerceAtLeast(0f)).toInt().coerceAtMost(lastIndex)
+    val startIndex = maxOf(0, activeIndex - MaxStackedCardsBeforeActive)
+    val endIndex = minOf(lastIndex, activeIndex + VisibleCardsAfterActive)
+    return startIndex..endIndex
 }
 
 private fun stackStyleProgress(activeStep: Int): Float =
@@ -1957,7 +2005,10 @@ private fun Density.isCardBodyHit(
 
     val topPadding = CardStackTopPadding.toPx()
     val cardHeight = CardHeight.toPx()
-    return visibleCardRange(stepProgress, lastIndex).any { index ->
+    return visibleCardRange(
+        stepProgress = stepProgress,
+        lastIndex = lastIndex,
+    ).any { index ->
         val top = topPadding + interpolateCardFrame(
             index = index,
             stepProgress = stepProgress,
@@ -2100,7 +2151,9 @@ private fun Modifier.planetShadow(
     glowColor: Color,
     planetWidth: Dp,
     planetHeight: Dp,
+    alphaProvider: () -> Float = { 1f },
 ): Modifier = drawBehind {
+    val glowAlpha = alphaProvider().coerceIn(0f, 1f)
     val blurPx = 100.dp.toPx()
     val planetRadiusPx = minOf(planetWidth.toPx(), planetHeight.toPx()) / 2f
     val glowRadius = planetRadiusPx + blurPx
@@ -2112,9 +2165,9 @@ private fun Modifier.planetShadow(
             colorStops = arrayOf(
                 0f to Color.Transparent,
                 (edgeStop * 0.72f) to Color.Transparent,
-                (edgeStop * 0.92f) to glowColor.copy(alpha = glowColor.alpha * 0.55f),
-                (edgeStop * 1.18f) to glowColor.copy(alpha = glowColor.alpha * 0.28f),
-                (edgeStop * 1.55f) to glowColor.copy(alpha = glowColor.alpha * 0.08f),
+                (edgeStop * 0.92f) to glowColor.copy(alpha = glowColor.alpha * 0.55f * glowAlpha),
+                (edgeStop * 1.18f) to glowColor.copy(alpha = glowColor.alpha * 0.28f * glowAlpha),
+                (edgeStop * 1.55f) to glowColor.copy(alpha = glowColor.alpha * 0.08f * glowAlpha),
                 1f to Color.Transparent,
             ),
             center = center,
@@ -2124,6 +2177,9 @@ private fun Modifier.planetShadow(
         center = center,
     )
 }
+
+private fun Color.withMultipliedAlpha(alphaMultiplier: Float): Color =
+    copy(alpha = alpha * alphaMultiplier.coerceIn(0f, 1f))
 
 private fun Modifier.arrowDropShadow(glowColor: Color): Modifier = drawBehind {
     val blurPx = SwipeArrowShadowBlur.toPx()
