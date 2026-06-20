@@ -22,7 +22,7 @@ android {
     buildTypes {
         release {
             optimization {
-                enable = false
+                enable = true
             }
         }
     }
@@ -54,12 +54,4 @@ dependencies {
 
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.foundation)
-
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.navigation.compose)
-
-    implementation(libs.androidx.metrics.performance)
-
-    androidTestImplementation(platform(libs.androidx.compose.bom))
 }
