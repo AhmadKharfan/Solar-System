@@ -14,6 +14,10 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -1094,17 +1098,7 @@ private fun SwipeHintFooter(
 
 @Composable
 private fun SwipeHintContent() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy((-4).dp),
-    ) {
-        SwipeHintArrowLayers.forEach { layerRes ->
-            SwipeArrowLayer(
-                res = layerRes,
-                glowColor = SolarColors.SwipeHintArrowGlow,
-            )
-        }
-    }
+    AnimatedSwipeArrows()
     Text(
         text = "Swipe up to explore",
         style = SolarTypography.SwipeHint,
@@ -1113,12 +1107,46 @@ private fun SwipeHintContent() {
 }
 
 @Composable
+private fun AnimatedSwipeArrows() {
+    val phase by rememberInfiniteTransition(label = "SwipeArrowWave").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = SwipeArrowWaveDurationMillis,
+                easing = LinearEasing,
+            ),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "SwipeArrowWavePhase",
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy((-4).dp),
+    ) {
+        repeat(SwipeArrowCount) { index ->
+            SwipeArrowLayer(
+                res = SwipeArrowIcon,
+                glowColor = SolarColors.SwipeHintArrowGlow,
+                alpha = swipeArrowWaveAlpha(
+                    index = index,
+                    phase = phase,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
 private fun SwipeArrowLayer(
     @DrawableRes res: Int,
     modifier: Modifier = Modifier,
     glowColor: Color,
+    alpha: Float = 1f,
 ) {
     val usesBlurShadow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val arrowAlpha = alpha.coerceIn(0f, 1f)
     Box(
         modifier = modifier
             .graphicsLayer { clip = false }
@@ -1127,17 +1155,20 @@ private fun SwipeArrowLayer(
                 if (usesBlurShadow) {
                     Modifier
                 } else {
-                    Modifier.arrowDropShadow(glowColor)
+                    Modifier.arrowDropShadow(glowColor.withMultipliedAlpha(arrowAlpha))
                 },
             ),
     ) {
         if (usesBlurShadow) {
             SwipeArrowBlurShadow(
                 res = res,
-                glowColor = glowColor,
+                glowColor = glowColor.withMultipliedAlpha(arrowAlpha),
             )
         }
-        SwipeArrowImage(res = res)
+        SwipeArrowImage(
+            res = res,
+            alpha = arrowAlpha,
+        )
     }
 }
 
@@ -1160,11 +1191,18 @@ private fun SwipeArrowBlurShadow(
 }
 
 @Composable
-private fun SwipeArrowImage(@DrawableRes res: Int) {
+private fun SwipeArrowImage(
+    @DrawableRes res: Int,
+    alpha: Float,
+) {
     Image(
         painter = painterResource(res),
         contentDescription = null,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                this.alpha = alpha
+            },
         contentScale = ContentScale.Fit,
     )
 }
@@ -2171,15 +2209,41 @@ private val EndGradientStops = listOf(
     1f to SolarColors.BackgroundGradient.EndBlack,
 )
 
-private val SwipeHintArrowLayers = listOf(
-    R.drawable.ic_arrow1,
-    R.drawable.ic_arrow2,
-    R.drawable.ic_arrow3,
-)
+private val SwipeArrowIcon = R.drawable.ic_arrow1
+private const val SwipeArrowCount = 3
+private const val SwipeArrowWaveDurationMillis = 1200
+private const val SwipeArrowWeakAlpha = 0.25f
+private const val SwipeArrowMediumAlpha = 0.55f
+private const val SwipeArrowStrongAlpha = 1f
 
 private fun cardStackEntranceProgress(rawProgress: Float): Float {
     val clamped = rawProgress.coerceIn(0f, 1f)
     return CardStackEasing.transform(delayedCardStackProgress(clamped))
+}
+
+private fun swipeArrowWaveAlpha(
+    index: Int,
+    phase: Float,
+): Float {
+    val reversedPhase = 1f - (phase - floor(phase))
+    val scaledPhase = reversedPhase * SwipeArrowCount
+    val fromFrame = scaledPhase.toInt().coerceIn(0, SwipeArrowCount - 1)
+    val toFrame = (fromFrame + 1) % SwipeArrowCount
+    val fraction = smoothStep(scaledPhase - fromFrame)
+    return interpolate(
+        swipeArrowAlphaAtFrame(index, fromFrame),
+        swipeArrowAlphaAtFrame(index, toFrame),
+        fraction,
+    )
+}
+
+private fun swipeArrowAlphaAtFrame(
+    index: Int,
+    frame: Int,
+): Float = when ((index - frame + SwipeArrowCount) % SwipeArrowCount) {
+    0 -> SwipeArrowWeakAlpha
+    1 -> SwipeArrowMediumAlpha
+    else -> SwipeArrowStrongAlpha
 }
 
 private fun cardsScreenTop(progress: Float): Dp =
