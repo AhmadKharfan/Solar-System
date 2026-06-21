@@ -4,7 +4,11 @@ An interactive Android app that explores our solar system starting on Earth and 
 
 ## Demo
 
-https://github.com/user-attachments/assets/your-video-here
+
+
+https://github.com/user-attachments/assets/dcac92ea-2894-4e77-bf5a-449716326d94
+
+
 
 ## Tech Stack
 
